@@ -63,6 +63,9 @@ export default async function handler(req, res) {
     const r = await fetch(url, { headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml', 'accept-language': 'en-US,en;q=0.9' }, redirect: 'follow', signal: AbortSignal.timeout(10000) });
     status = r.status; html = (await r.text()).slice(0, 4_000_000);
   } catch { return res.status(200).json({ ok: false, reason: 'fetch-failed' }); }
+  // the site declined the request (error page or bot check): report it rather than returning junk
+  if (status >= 400 || /access denied|restricted access|px-captcha|just a moment|attention required|are you a robot|request blocked/i.test(html.slice(0, 20000)))
+    return res.status(200).json({ ok: false, reason: 'blocked', status });
   const m = metaMap(html);
   let prod = null;
   for (const s of html.match(/<script[^>]*application\/ld\+json[^>]*>[\s\S]*?<\/script>/gi) || []) {
