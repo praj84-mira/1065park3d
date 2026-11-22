@@ -476,7 +476,7 @@ function buildFireplace(){
   else if (String(a).startsWith('c:')) { const ci = (store.items || []).find(i => i.id === a.slice(2));
     if (ci) { const aw = Math.min(6, Math.max(1, ci.w/12)), ah = Math.min(3.6, Math.max(1, ci.h/12)), cy = Math.min(ay, 8.0 - ah/2);
       fireGroup.add(box(.1, ah + .12, aw + .12, MAT.frame, .05, cy, zc));
-      const cm = new THREE.MeshStandardMaterial({ color: ci.image ? '#ffffff' : (ci.color || '#ddd'), map: ci.image ? imgTex(ci.image) : null, roughness: .85 });
+      const cm = new THREE.MeshStandardMaterial({ color: pic(ci) ? '#ffffff' : (ci.color || '#ddd'), map: pic(ci) ? imgTex(pic(ci)) : null, roughness: .85 });
       const cp = new THREE.Mesh(new THREE.PlaneGeometry(aw, ah), cm); cp.rotation.y = Math.PI/2; cp.position.set(.105, cy, zc); fireGroup.add(cp); } }
   if (S.sconces) for (const sz of [z0 - .55, z1 + .55]) { const sg = new THREE.Group(); sg.position.set(0, 5.9, sz);
     const plate = cyl(.16, .16, .05, MAT.brass, .025, 0, 0); plate.rotation.z = Math.PI/2; sg.add(plate);
@@ -571,7 +571,9 @@ const KIND_IN = { sofa:[88,38,32], sectional:[114,84,32], chair:[32,35,32], slip
 const imgUrl = u => u ? '/api/img?u=' + encodeURIComponent(u) : '';
 const texLoader = new THREE.TextureLoader();
 const imgTexCache = new Map();
-function imgTex(u){ if (!imgTexCache.has(u)) { const t = texLoader.load(imgUrl(u)); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; imgTexCache.set(u, t); } return imgTexCache.get(u); }
+const fileUrl = p => '/api/file?p=' + encodeURIComponent(p);
+const pic = ci => ci.photo ? fileUrl(ci.photo) : (ci.image ? imgUrl(ci.image) : '');
+function imgTex(u){ if (!imgTexCache.has(u)) { const t = texLoader.load(u); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; imgTexCache.set(u, t); } return imgTexCache.get(u); }
 const colMatCache = new Map();
 function colMat(kind, color){ const k = kind + color; if (!colMatCache.has(k)) colMatCache.set(k, kind === 'fab' ? std({ color, map: fabricTex(), roughness: .9, side: THREE.DoubleSide }) : std({ color, map: woodTex(), roughness: .5 })); return colMatCache.get(k); }
 const customCatCache = new Map();
@@ -592,7 +594,7 @@ function buildCustom(ci){
   if (ci.color) inner.traverse(o => { if (!o.isMesh) return; if (o.material === MAT.sofa || o.material === MAT.chair) o.material = colMat('fab', ci.color); else if (o.material === MAT.table) o.material = colMat('wood', ci.color); });
   const g = new THREE.Group(); g.add(inner); if (inner.userData.light) g.userData.light = inner.userData.light; return g;
 }
-function customRugMat(ci){ const m = std({ color: ci.image ? '#ffffff' : (ci.color || '#cbbfa8'), roughness: 1 }); if (ci.image) m.map = imgTex(ci.image); return m; }
+function customRugMat(ci){ const m = std({ color: pic(ci) ? '#ffffff' : (ci.color || '#cbbfa8'), roughness: 1 }); if (pic(ci)) m.map = imgTex(pic(ci)); return m; }
 function refreshCustom(){ customCatCache.clear(); if (S) { rebuildItems(); if (String(S.above).startsWith('c:')) buildFireplace(); } }
 
 const itemsGroup = new THREE.Group(); scene.add(itemsGroup);
@@ -651,7 +653,7 @@ function applyWalls(){ for (const [g] of WALL_GROUPS) { const w = S.walls[g], m 
   if (t.map) { t.map.repeat.set(1/t.tile[0], 1/t.tile[1]); m.map = t.map; m.color.set('#ffffff'); } else { m.map = null; m.color.set(w.c); }
   m.roughness = w.f === 'oak' || w.f === 'walnut' ? .6 : .92; m.needsUpdate = true; } }
 function applyFloor(){ MAT.floor.map = floorTex(S.floorP, S.floorT); MAT.floor.needsUpdate = true; }
-function applyFabrics(){ for (const [k, key] of [['sofa', 'sofaF'], ['chair', 'chairF']]) { const f = FABRICS.find(x => x[0] === S[key]) || FABRICS[0]; const m = MAT[k]; m.color.set(f[2]); m.roughness = f[3]; m.map = f[0] === 'camel' ? null : fabricTex(); m.needsUpdate = true; }
+function applyFabrics(){ for (const [k, key] of [['sofa', 'sofaF'], ['chair', 'chairF']]) { const f = FABRICS.find(x => x[0] === S[key]) || (/^#[0-9a-f]{6}$/i.test(S[key] || '') ? ['custom', 'Custom', S[key], .85] : FABRICS[0]); const m = MAT[k]; m.color.set(f[2]); m.roughness = f[3]; m.map = f[0] === 'camel' ? null : fabricTex(); m.needsUpdate = true; }
   const t = TABLES.find(x => x[0] === S.table) || TABLES[0]; MAT.table.color.set(t[0] === 'travertine' ? '#ffffff' : t[2]); MAT.table.map = t[0] === 'travertine' ? marbleTex('travertine') : t[0] === 'lacquer' ? null : woodTex(); MAT.table.roughness = t[0] === 'lacquer' ? .22 : t[0] === 'travertine' ? .6 : .5; MAT.table.needsUpdate = true; }
 function applyLight(){
   const eve = S && S.time === 'evening';
@@ -766,6 +768,17 @@ function renderPanel(){
   const P_ = (...k) => panel.append(...k);
   if (tab === 'schemes') {
     P_(h('div', { class: 'lbl' }, 'Showing: ' + loadedLabel, dirty ? h('span', { class: 'dirty' }, '• edited') : ''));
+    { const ta = h('textarea', { placeholder: 'Describe a look, e.g. “warm and moody, dark green fireplace wall, walnut, rust velvet chairs, Calacatta”', style: 'width:100%;min-height:62px;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;box-sizing:border-box' });
+      ta.value = lookText; ta.oninput = () => lookText = ta.value;
+      const fin = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
+      const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference photo: ' + lookFile.name : '');
+      fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference photo: ' + lookFile.name : ''; };
+      const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Create this look');
+      go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; } go.disabled = true; go.textContent = 'Designing…';
+        try { const img = lookFile ? await toDataUrl(lookFile) : null; const o = await askAI('scheme', lookText.trim(), img); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
+        catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Create this look'; } };
+      P_(lbl('Describe a look'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo'), go), fin, st,
+        h('div', { class: 'note', style: 'margin-top:4px' }, 'Changes walls, floor, fireplace, fabrics and windows, and keeps your furniture where it is. A magazine photo works as a reference.')); }
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
     const vs = allVersions();
@@ -801,10 +814,10 @@ function renderPanel(){
     P_(lbl('Extras'), h('div', { class: 'row' }, chip('Flanking sconces', S.sconces, () => set('sconces', !S.sconces, buildFireplace)), chip('Fire on', S.fire, () => set('fire', !S.fire, applyLight))));
   }
   if (tab === 'furn') {
-    P_(lbl('Your items (from links)'));
-    P_(h('button', { class: 'btn', on: () => itemDlg() }, '+ Add an item from a link'));
+    P_(lbl('Your items'));
+    P_(h('button', { class: 'btn', on: () => itemDlg() }, '+ Add an item'));
     const its = store.items || [];
-    if (!its.length) P_(h('div', { class: 'note' }, 'Paste a product link. I pull the name, photo, price and size where the site allows. You choose what it is, adjust the size, and add notes. It then shows up in the room at that size.'));
+    if (!its.length) P_(h('div', { class: 'note' }, 'Add a photo (a screenshot of the product works), say what it is and what it’s for, set the size, and attach the spec sheet if you have one. It then shows up in the room at that size.'));
     else P_(h('div', { style: 'margin-top:10px' }, its.slice().reverse().map(ci => {
       const kn = (KINDS.find(k => k[0] === ci.kind) || [, 'Item'])[1];
       const acts = h('div', { class: 'acts' });
@@ -812,8 +825,8 @@ function renderPanel(){
       else acts.append(h('button', { class: 'pl', on: () => addItem('c:' + ci.id) }, 'Place'));
       if (ci.url) acts.append(h('a', { href: ci.url, target: '_blank', rel: 'noopener' }, '↗'));
       acts.append(h('button', { on: () => infoDlg(ci) }, 'Info'));
-      return h('div', { class: 'ci' }, ci.image ? h('img', { src: imgUrl(ci.image), loading: 'lazy', alt: '' }) : h('div', { class: 'ph' }),
-        h('div', { class: 'grow' }, h('div', { class: 't' }, ci.name), h('div', { class: 'd' }, kn + ' · ' + fmtDims(ci) + (ci.price ? ' · ' + ci.price : '') + (ci.by ? ' · ' + ci.by : ''))), acts);
+      return h('div', { class: 'ci' }, pic(ci) ? h('img', { src: pic(ci), loading: 'lazy', alt: '' }) : h('div', { class: 'ph' }),
+        h('div', { class: 'grow' }, h('div', { class: 't' }, ci.name), h('div', { class: 'd' }, kn + ' · ' + fmtDims(ci) + (ci.price ? ' · ' + ci.price : '') + (ci.spec ? ' · spec' : '') + (ci.by ? ' · ' + ci.by : ''))), acts);
     })));
     P_(lbl('Generic pieces'));
     P_(h('div', { class: 'note', style: 'margin-top:4px' }, 'Tap a piece to select it. Drag it to move, and use the bar to rotate, copy or remove. Drag empty space to orbit, and pinch to zoom.'));
@@ -851,43 +864,92 @@ function fmtDims(ci){ const f = v => (Math.round(v*10)/10).toString().replace(/\
 function avgColor(src){ return new Promise(res => { const im = new Image(); im.onload = () => { try { const c = document.createElement('canvas'); c.width = c.height = 40; const x = c.getContext('2d'); x.drawImage(im, 0, 0, 40, 40); const d = x.getImageData(8, 8, 24, 24).data; let r = 0, g = 0, b = 0, n = 0;
   for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i+1] + d[i+2])/3; if (l > 235 || l < 12) continue; r += d[i]; g += d[i+1]; b += d[i+2]; n++; }
   if (!n) return res(null); const hx = v => Math.round(v/n).toString(16).padStart(2, '0'); res('#' + hx(r) + hx(g) + hx(b)); } catch { res(null); } }; im.onerror = () => res(null); im.src = src; }); }
+async function toDataUrl(file, max = 1024){
+  const u = URL.createObjectURL(file);
+  try { const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
+    const sc = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth*sc); c.height = Math.round(im.naturalHeight*sc);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .82); }
+  catch { return null; } finally { URL.revokeObjectURL(u); }
+}
+async function askAI(mode, text, image){
+  const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image }) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'AI request failed'); return j;
+}
+function applyLook(o){
+  if (o.walls) for (const g of Object.keys(o.walls)) S.walls[g] = o.walls[g];
+  for (const k of ['floorP','floorT','marble','mantel','above','sofaF','chairF','table','rug','drapes','drapeColor','crown','sconces']) if (o[k] !== undefined) S[k] = o[k];
+  applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); refreshRugs();
+  loadedLabel = 'Described look'; dirty = true; renderPanel();
+}
+let lookText = '', lookFile = null;
+async function shrinkImage(file){
+  const u = URL.createObjectURL(file);
+  try { const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
+    const sc = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth*sc); c.height = Math.round(im.naturalHeight*sc);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); const b = await new Promise(r => c.toBlob(r, 'image/jpeg', .85)); return b || file; }
+  catch { return file; } finally { URL.revokeObjectURL(u); }
+}
+async function uploadFile(blob, name, type){
+  if (!online) throw new Error('Uploads need the shared store, which isn’t reachable right now.');
+  if (blob.size > 4.3e6) throw new Error('That file is over 4 MB. Try a smaller PDF, or a screenshot of the spec page.');
+  const r = await fetch('/api/upload', { method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-file-type': type, 'x-file-name': encodeURIComponent(String(name || 'file').slice(0, 80)) }, body: blob });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Upload failed'); return j;
+}
 function itemDlg(ci){
   const isNew = !ci; ci = ci ? { ...ci } : { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), kind: 'sofa', w: 88, d: 38, h: 32 };
-  dlgbox.innerHTML = '';
+  dlgbox.innerHTML = ''; const pending = new Set();
   const F = {}; const inp = (k, attrs = {}) => (F[k] = h('input', { ...attrs }));
-  const url = inp('url', { type: 'url', placeholder: 'https://…', value: ci.url || '' });
-  const stat = h('div', { class: 'stat' }); const prevImg = h('img', { alt: '' }); const prev = h('div', { class: 'prev' }, prevImg, h('div', { class: 'stat', style: 'flex:1' }));
-  const showPrev = () => { if (ci.image) { prevImg.src = imgUrl(ci.image); prev.style.display = 'flex'; } else prev.style.display = 'none'; }; showPrev();
-  const name = inp('name', { placeholder: 'e.g. Cloud sofa in oatmeal', value: ci.name || '', maxlength: '80' });
+  // photo
+  const prevImg = h('img', { alt: '', style: 'width:96px;height:96px' }); const photoStat = h('div', { class: 'stat', style: 'flex:1;margin:0' });
+  const photoIn = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
+  const photoBtn = h('button', { class: 'btn sec', style: 'width:auto;padding:9px 12px' }, pic(ci) ? 'Change photo' : 'Add photo');
+  photoBtn.onclick = () => photoIn.click();
+  const showPrev = src => { if (src) { prevImg.src = src; prevImg.style.display = ''; } else prevImg.style.display = 'none'; }; showPrev(pic(ci));
+  photoIn.onchange = () => { const f = photoIn.files[0]; if (!f) return; photoFile = f; const local = URL.createObjectURL(f); showPrev(local); photoStat.textContent = 'Uploading…';
+    avgColor(local).then(c => { if (c && !ci.color) { col.value = c; useCol.checked = true; } });
+    const job = (async () => { const b = await shrinkImage(f); const j = await uploadFile(b, f.name, b.type || f.type || 'image/jpeg'); ci.photo = j.path; photoStat.textContent = 'Photo added'; photoBtn.textContent = 'Change photo'; })()
+      .catch(e => { photoStat.textContent = e.message; }).finally(() => pending.delete(job)); pending.add(job); };
+  // spec sheet
+  const specIn = h('input', { type: 'file', accept: 'application/pdf,image/*', style: 'display:none' });
+  const specStat = h('div', { class: 'stat', style: 'flex:1;margin:0' }, ci.spec ? ci.spec.name : 'No spec sheet yet');
+  const specBtn = h('button', { class: 'btn sec', style: 'width:auto;padding:9px 12px' }, ci.spec ? 'Replace' : 'Attach PDF');
+  specBtn.onclick = () => specIn.click();
+  specIn.onchange = () => { const f = specIn.files[0]; if (!f) return; specStat.textContent = 'Uploading ' + f.name + '…';
+    const job = (async () => { let b = f, type = f.type || 'application/pdf'; if (type.startsWith('image/')) { b = await shrinkImage(f); type = b.type || 'image/jpeg'; }
+      const j = await uploadFile(b, f.name, type); ci.spec = { path: j.path, name: f.name, type }; specStat.textContent = f.name; specBtn.textContent = 'Replace'; })()
+      .catch(e => { specStat.textContent = e.message; }).finally(() => pending.delete(job)); pending.add(job); };
+  const desc = h('textarea', { placeholder: 'Optional. Describe it and I’ll fill in the rest, e.g. “curved bouclé sofa about 8 feet, warm white”. Works with the photo too.', style: 'min-height:56px' });
+  const aiStat = h('div', { class: 'stat' });
+  const aiBtn = h('button', { class: 'btn', style: 'width:auto;padding:9px 12px;flex:none' }, '✨ Fill in');
+  let photoFile = null;
+  aiBtn.onclick = async () => {
+    const t = desc.value.trim(); if (!t && !photoFile) { aiStat.textContent = 'Type a description or add a photo first.'; desc.focus(); return; }
+    aiBtn.disabled = true; aiStat.textContent = 'Working it out…';
+    try { const img = photoFile ? await toDataUrl(photoFile) : null; const o = await askAI('item', t, img);
+      if (o.name && (!name.value || isNew)) name.value = o.name; if (o.kind) { kind.value = o.kind; kindHint(); }
+      if (o.w) W_.value = o.w; if (o.d) D_.value = o.d; if (o.h && o.kind !== 'rug') H_.value = o.h; ci._dimsTouched = true;
+      if (o.color) { col.value = o.color; useCol.checked = true; }
+      if (o.notes && !notes.value) notes.value = (t ? t + '\n' : '') + o.notes;
+      aiStat.textContent = 'Filled in. Check the size before relying on it.';
+    } catch (e) { aiStat.textContent = e.message; } finally { aiBtn.disabled = false; }
+  };
+  const name = inp('name', { placeholder: 'e.g. Velvet sofa, 96″', value: ci.name || '', maxlength: '80' });
   const kind = h('select', {}, KINDS.map(([k, n]) => { const o = h('option', { value: k }, n); if (k === ci.kind) o.selected = true; return o; }));
-  const W_ = inp('w', { type: 'number', step: '0.5', min: '1', value: ci.w ?? '' }), D_ = inp('d', { type: 'number', step: '0.5', min: '0.5', value: ci.d ?? '' }), H_ = inp('h', { type: 'number', step: '0.5', min: '0.1', value: ci.h ?? '' });
+  const notes = h('textarea', { placeholder: 'What it’s for and anything worth remembering, e.g. main sofa facing the fireplace, Nitya likes this fabric, check that 96″ fits' }); notes.value = ci.notes || '';
+  const W_ = inp('w', { type: 'number', inputmode: 'decimal', step: '0.5', min: '1', value: ci.w ?? '' }), D_ = inp('d', { type: 'number', inputmode: 'decimal', step: '0.5', min: '0.5', value: ci.d ?? '' }), H_ = inp('h', { type: 'number', inputmode: 'decimal', step: '0.5', min: '0.1', value: ci.h ?? '' });
+  W_.placeholder = 'W'; D_.placeholder = 'D'; H_.placeholder = 'H';
   const dimLbl = h('label', {}, 'Size in inches: width · depth · height');
   const useCol = h('input', { type: 'checkbox', style: 'width:20px;height:20px;flex:none;margin:0' }); useCol.checked = !!ci.color;
   const col = inp('color', { type: 'color', value: ci.color || '#b9a88e', style: 'width:46px;height:40px;padding:2px;flex:none' });
   const price = inp('price', { placeholder: 'e.g. $3,450', value: ci.price || '' });
-  const notes = h('textarea', { placeholder: 'What is it, fabric or finish, why you like it, questions for each other…' }); notes.value = ci.notes || '';
-  const kindHint = () => { const k = kind.value; dimLbl.textContent = k === 'rug' ? 'Size in inches: length · width (e.g. 144 × 108 for 12′×9′)' : k === 'art' ? 'Size in inches: width · depth · height' : 'Size in inches: width · depth · height'; H_.style.display = k === 'rug' ? 'none' : ''; };
-  kind.onchange = () => { const dd = KIND_IN[kind.value]; if (!W_.value || isNew && !ci._dimsFound) { W_.value = dd[0]; D_.value = dd[1]; H_.value = dd[2]; } kindHint(); };
+  const url = inp('url', { type: 'url', placeholder: 'https://… (optional)', value: ci.url || '' });
+  const kindHint = () => { const k = kind.value; dimLbl.textContent = k === 'rug' ? 'Size in inches: length · width (e.g. 144 × 108 for a 12′×9′ rug)' : 'Size in inches: width · depth · height'; H_.style.display = k === 'rug' ? 'none' : ''; };
+  kind.onchange = () => { const dd = KIND_IN[kind.value]; if (isNew && !ci._dimsTouched) { W_.value = dd[0]; D_.value = dd[1]; H_.value = dd[2]; } kindHint(); };
+  [W_, D_, H_].forEach(e => e.addEventListener('input', () => ci._dimsTouched = true));
   kindHint();
-  const fetchBtn = h('button', { class: 'btn sec', style: 'width:auto;flex:none;padding:10px 12px' }, 'Fetch');
-  fetchBtn.onclick = async () => {
-    const u = url.value.trim(); if (!u) { url.focus(); return; } stat.textContent = 'Reading the page…'; fetchBtn.disabled = true;
-    try { const r = await fetch('/api/meta?url=' + encodeURIComponent(u)); const m = await r.json();
-      if (!m.ok) { stat.textContent = 'That site wouldn’t share its details (some stores block this). Fill in the fields below.'; return; }
-      if (m.title && !name.value) name.value = m.title.slice(0, 80);
-      if (m.image) { ci.image = m.image; showPrev(); avgColor(imgUrl(m.image)).then(c => { if (c && !ci.color) { col.value = c; } }); }
-      if (m.kind && isNew) { kind.value = m.kind; }
-      const dd = KIND_IN[kind.value];
-      if (m.dims && m.dims.w) { W_.value = m.dims.w; if (m.dims.d) D_.value = m.dims.d; if (m.dims.h) H_.value = m.dims.h; ci._dimsFound = true; } else if (isNew) { W_.value = dd[0]; D_.value = dd[1]; H_.value = dd[2]; }
-      if (m.price && !price.value) { const n = parseFloat(m.price); price.value = isFinite(n) ? (m.currency === 'USD' || !m.currency ? '$' : m.currency + ' ') + n.toLocaleString() : m.price; }
-      if (m.desc && !notes.value) notes.value = '';
-      kindHint();
-      stat.textContent = 'Found: ' + (m.brand ? m.brand + ' · ' : '') + (m.dims && m.dims.w ? 'size found, please check it' : 'no size listed, so these are typical sizes. Please edit them.');
-    } catch { stat.textContent = 'Couldn’t read that link. Fill in the fields below.'; }
-    finally { fetchBtn.disabled = false; }
-  };
   const save = async () => {
-    const it = { id: ci.id, url: url.value.trim(), image: ci.image || null, name: name.value.trim() || 'Untitled item', kind: kind.value,
+    if (pending.size) { const sb = saveBtn.textContent; saveBtn.textContent = 'Finishing upload…'; saveBtn.disabled = true; await Promise.allSettled([...pending]); saveBtn.textContent = sb; saveBtn.disabled = false; }
+    const it = { id: ci.id, url: url.value.trim(), image: ci.image || null, photo: ci.photo || null, spec: ci.spec || null, name: name.value.trim() || 'Untitled item', kind: kind.value,
       w: +W_.value || KIND_IN[kind.value][0], d: +D_.value || KIND_IN[kind.value][1], h: kind.value === 'rug' ? .5 : (+H_.value || KIND_IN[kind.value][2]),
       color: useCol.checked ? col.value : null, price: price.value.trim(), notes: notes.value.trim(), by: ci.by || who, at: ci.at || new Date().toISOString(), updated: new Date().toISOString() };
     if (it.kind === 'rug' && it.d > it.w) [it.w, it.d] = [it.d, it.w];
@@ -895,26 +957,33 @@ function itemDlg(ci){
     if (ok && isNew) { if (it.kind === 'art') { set('above', 'c:' + it.id, buildFireplace); toast('Hung over the mantel. Change it under Fireplace.'); } else addItem('c:' + it.id); }
     else if (ok) toast('Updated');
   };
+  const saveBtn = h('button', { class: 'btn', on: save }, isNew ? 'Add to room' : 'Save');
   const del = h('button', { class: 'btn sec', style: 'color:#8b3b2e' }, 'Delete item');
   del.onclick = () => { closeDlg(); confirmDlg('Delete “' + (ci.name || 'item') + '” for everyone?', async () => { await mutate({ op: 'delItem', id: ci.id }, st => st.items = st.items.filter(x => x.id !== ci.id)); S.items = S.items.filter(i => i.t !== 'c:' + ci.id); if (S.above === 'c:' + ci.id) { S.above = 'none'; buildFireplace(); } rebuildItems(); renderPanel(); }); };
-  dlgbox.append(h('h3', {}, isNew ? 'Add an item' : 'Edit item'), h('p', {}, 'Paste a link and tap Fetch, or just type it in. Generic shapes only: the size and color are what matter.'),
+  dlgbox.append(h('h3', {}, isNew ? 'Add an item' : 'Edit item'), h('p', {}, 'It shows in the room as a simple shape at this size and color. The photo and spec sheet stay attached for reference.'),
     h('div', { class: 'form' },
-      h('label', {}, 'Product link'), h('div', { class: 'inl' }, url, fetchBtn), stat, prev,
+      h('label', {}, 'Describe it'), h('div', { class: 'inl', style: 'align-items:flex-start' }, desc, aiBtn), aiStat,
+      h('label', {}, 'Photo'), h('div', { class: 'prev', style: 'margin-top:0' }, prevImg, h('div', { style: 'flex:1;display:flex;flex-direction:column;gap:6px;align-items:flex-start' }, photoBtn, photoStat)), photoIn,
       h('label', {}, 'Name'), name, h('label', {}, 'What is it'), kind,
+      h('label', {}, 'What it’s for / notes'), notes,
       dimLbl, h('div', { class: 'three' }, W_, D_, H_),
-      h('label', {}, 'Color in the 3D view'), h('div', { class: 'inl' }, useCol, col, h('span', { style: 'font-size:12.5px;color:var(--muted)' }, 'Use this color (unticked follows the scheme fabrics)')),
-      h('label', {}, 'Price'), price, h('label', {}, 'Notes'), notes, h('label', {}, 'Added by'), whoRow()),
-    h('div', { class: 'bts', style: 'margin-top:14px' }, h('button', { class: 'btn sec', on: closeDlg }, 'Cancel'), h('button', { class: 'btn', on: save }, isNew ? 'Add to room' : 'Save')),
+      h('label', {}, 'Color in the 3D view'), h('div', { class: 'inl' }, useCol, col, h('span', { style: 'font-size:12.5px;color:var(--muted)' }, 'Use this color. Untick to follow the scheme fabrics; a photo sets it automatically.')),
+      h('label', {}, 'Spec sheet'), h('div', { class: 'inl' }, specBtn, specStat), specIn,
+      h('label', {}, 'Price'), price, h('label', {}, 'Product link'), url,
+      h('label', {}, 'Added by'), whoRow()),
+    h('div', { class: 'bts', style: 'margin-top:14px' }, h('button', { class: 'btn sec', on: closeDlg }, 'Cancel'), saveBtn),
     isNew ? '' : h('div', { style: 'margin-top:8px' }, del));
   col.addEventListener('input', () => useCol.checked = true);
-  dlg.classList.add('show'); if (isNew) setTimeout(() => url.focus(), 60);
+  dlg.classList.add('show');
 }
 function infoDlg(ci){
   dlgbox.innerHTML = ''; const kn = (KINDS.find(k => k[0] === ci.kind) || [, 'Item'])[1];
-  dlgbox.append(h('div', { class: 'info' }, ci.image ? h('img', { src: imgUrl(ci.image), alt: '' }) : '', h('h3', { style: 'margin-top:10px' }, ci.name),
+  const linkBtn = (href, txt) => h('a', { href, target: '_blank', rel: 'noopener', class: 'btn sec', style: 'display:block;text-align:center;text-decoration:none;box-sizing:border-box;margin-bottom:8px' }, txt);
+  dlgbox.append(h('div', { class: 'info' }, pic(ci) ? h('img', { src: pic(ci), alt: '' }) : '', h('h3', { style: 'margin-top:10px' }, ci.name),
     h('div', { class: 'meta' }, [kn, fmtDims(ci), ci.price, ci.by ? 'added by ' + ci.by : ''].filter(Boolean).join(' · ')),
     ci.notes ? h('div', { class: 'notes' }, ci.notes) : '',
-    ci.url ? h('a', { href: ci.url, target: '_blank', rel: 'noopener', class: 'btn sec', style: 'display:block;text-align:center;text-decoration:none;box-sizing:border-box;margin-bottom:8px' }, 'Open product page ↗') : '',
+    ci.spec ? linkBtn(fileUrl(ci.spec.path), 'Open spec sheet ↗') : '',
+    ci.url ? linkBtn(ci.url, 'Open product page ↗') : '',
     h('div', { class: 'bts' }, h('button', { class: 'btn sec', on: closeDlg }, 'Close'), h('button', { class: 'btn', on: () => itemDlg(ci) }, 'Edit'))));
   dlg.classList.add('show');
 }
