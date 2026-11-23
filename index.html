@@ -540,6 +540,24 @@ function lamp(){ const g = new THREE.Group(); g.add(cyl(.45, .5, .08, MAT.brass,
   const l = new THREE.PointLight('#ffc98a', 0, 0, 2); l.position.set(0, 5.0, 0); g.add(l); g.userData.light = l; return g; }
 function plant(){ const g = new THREE.Group(); g.add(cyl(.55, .42, 1.2, MAT.pot, 0, .6, 0)); g.add(cyl(.05, .06, 3.6, MAT.legs, 0, 2.8, 0, 8)); const r = rng(8);
   for (let i = 0; i < 16; i++) { const lf = mesh(new THREE.IcosahedronGeometry(.35 + r()*.35, 0), r() < .5 ? MAT.leaf : MAT.leaf2, (r()-.5)*1.4, 2.8 + r()*3.4, (r()-.5)*1.4); lf.scale.y = .6; g.add(lf); } return g; }
+const MAT_PIANO = std({ color: '#0b0b0c', roughness: .14, metalness: .1 });
+function piano(){
+  const g = new THREE.Group(); const sh = new THREE.Shape();
+  sh.moveTo(-2.4, 0); sh.lineTo(2.4, 0); sh.lineTo(2.4, 1.0); sh.quadraticCurveTo(2.3, 2.8, .6, 3.4); sh.quadraticCurveTo(-.3, 3.8, -.5, 4.8);
+  sh.quadraticCurveTo(-.9, 5.4, -1.8, 5.3); sh.quadraticCurveTo(-2.4, 5.2, -2.4, 4.6); sh.lineTo(-2.4, 0);
+  const caseG = new THREE.ExtrudeGeometry(sh, { depth: .95, bevelEnabled: true, bevelThickness: .03, bevelSize: .03, bevelSegments: 2 });
+  const body = mesh(caseG, MAT_PIANO); body.rotation.x = -Math.PI/2; body.position.set(0, 2.0, 2.65); g.add(body);
+  const lidG = new THREE.ExtrudeGeometry(sh, { depth: .04, bevelEnabled: false });
+  const lid = mesh(lidG, MAT_PIANO); lid.rotation.x = -Math.PI/2; const lp = new THREE.Group(); lp.position.set(-2.4, 2.98, 0); lid.position.set(2.4, 0, 2.65); lp.add(lid); lp.rotation.z = .62; g.add(lp);
+  const prop = cyl(.02, .02, 2.1, MAT.brass, .9, 3.7, -.3, 8); prop.rotation.z = .35; g.add(prop);
+  g.add(box(4.3, .5, .75, MAT_PIANO, 0, 2.2, 3.0));
+  g.add(box(4.0, .06, .55, std({ color: '#F4F1EA', roughness: .4 }), 0, 2.47, 3.02));
+  for (let i = 0; i < 36; i++) if ([1, 3, 6, 8, 10].includes(i % 12)) g.add(box(.05, .05, .32, MAT_PIANO, -1.95 + i*.111, 2.52, 2.9));
+  g.add(box(2.2, .9, .05, MAT_PIANO, 0, 3.1, 2.55));
+  for (const [x, z] of [[-2.0, 2.4], [2.0, 2.4], [-1.5, -2.2]]) g.add(cyl(.13, .1, 2.0, MAT_PIANO, x, 1.0, z, 16));
+  g.add(rb(2.6, 1.5, 1.2, .05, MAT_PIANO, 0, .75, 4.15));
+  return g;
+}
 function ottoman(){ const g = new THREE.Group(); g.add(cyl(.88, .9, 1.35, MAT.chair, 0, .675, 0, 40)); return g; }
 function rug(w, d){ const g = new THREE.Group(); const m = mesh(new THREE.BoxGeometry(w, .035, d), null, 0, .0175, 0); m.castShadow = false; m.userData.rug = [w, d]; g.add(m); return g; }
 
@@ -557,6 +575,7 @@ const CATALOG = {
   side: { name: 'Side table', w: 1.7, d: 1.7, b: sideT },
   console: { name: 'Console', w: 5, d: 1.25, b: consoleT },
   bench: { name: 'Window bench', w: 9.6, d: 1.75, b: bench },
+  piano: { name: 'Baby grand piano', w: 4.9, d: 5.4, b: piano },
   etagere: { name: 'Étagère', w: 3, d: 1.2, b: etagere },
   lamp: { name: 'Floor lamp', w: 1.4, d: 1.4, b: lamp },
   plant: { name: 'Plant', w: 1.6, d: 1.6, b: plant },
@@ -768,17 +787,17 @@ function renderPanel(){
   const P_ = (...k) => panel.append(...k);
   if (tab === 'schemes') {
     P_(h('div', { class: 'lbl' }, 'Showing: ' + loadedLabel, dirty ? h('span', { class: 'dirty' }, '• edited') : ''));
-    { const ta = h('textarea', { placeholder: 'Describe a look, e.g. “warm and moody, dark green fireplace wall, walnut, rust velvet chairs, Calacatta”', style: 'width:100%;min-height:62px;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;box-sizing:border-box' });
+    { const ta = h('textarea', { placeholder: 'Describe changes, e.g. “darken the floors, remove the rugs, add a baby grand in the corner by the windows”', style: 'width:100%;min-height:62px;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;box-sizing:border-box' });
       ta.value = lookText; ta.oninput = () => lookText = ta.value;
       const fin = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
       const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference photo: ' + lookFile.name : '');
       fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference photo: ' + lookFile.name : ''; };
-      const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Create this look');
+      const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Make the changes');
       go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; } go.disabled = true; go.textContent = 'Designing…';
         try { const img = lookFile ? await toDataUrl(lookFile) : null; const o = await askAI('scheme', lookText.trim(), img); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
-        catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Create this look'; } };
-      P_(lbl('Describe a look'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo'), go), fin, st,
-        h('div', { class: 'note', style: 'margin-top:4px' }, 'Changes walls, floor, fireplace, fabrics and windows, and keeps your furniture where it is. A magazine photo works as a reference.')); }
+        catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
+      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo'), go), fin, st,
+        h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). A magazine photo works as a reference. Save it as a version if you like it.')); }
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
     const vs = allVersions();
@@ -831,7 +850,7 @@ function renderPanel(){
     P_(lbl('Generic pieces'));
     P_(h('div', { class: 'note', style: 'margin-top:4px' }, 'Tap a piece to select it. Drag it to move, and use the bar to rotate, copy or remove. Drag empty space to orbit, and pinch to zoom.'));
     const groups = [['Seating', ['sofa96','sofa84','loveseat','sectional','lounge','slipper','swivel','ottoman','bench']], ['Tables & storage', ['coffeeRect','coffeeRound','side','console','etagere']], ['Rugs', ['rug810','rug912','rug1014']], ['Accents', ['lamp','plant']]];
-    groups.forEach(([n, ks]) => P_(lbl(n), h('div', { class: 'grid' }, ks.map(k => h('button', { class: 'add', on: () => addItem(k) }, '+ ' + CATALOG[k].name)))));
+    groups[3][1].push('piano'); groups.forEach(([n, ks]) => P_(lbl(n), h('div', { class: 'grid' }, ks.map(k => h('button', { class: 'add', on: () => addItem(k) }, '+ ' + CATALOG[k].name)))));
     P_(h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn sec', on: () => confirmDlg('Remove all furniture?', () => { S.items = []; setSelected(null); rebuildItems(); touch(); }) }, 'Clear room')));
   }
   if (tab === 'fab') {
@@ -871,15 +890,25 @@ async function toDataUrl(file, max = 1024){
     c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .82); }
   catch { return null; } finally { URL.revokeObjectURL(u); }
 }
+function aiContext(){
+  const items = S.items.map(i => { const c = getCat(i.t); return c ? { id: i.id, t: i.t, name: c.name, x: +(+i.x).toFixed(1), z: +(+i.z).toFixed(1), r: Math.round(i.r || 0), w: +c.w.toFixed(1), d: +c.d.toFixed(1) } : null; }).filter(Boolean);
+  const catalog = [...Object.entries(CATALOG).map(([t, c]) => ({ t, name: c.name, w: c.w, d: c.d })),
+    ...(store.items || []).filter(ci => ci.kind !== 'art').map(ci => ({ t: 'c:' + ci.id, name: ci.name + ' (their own item)', w: +(ci.w/12).toFixed(1), d: +(ci.d/12).toFixed(1) }))];
+  const finishes = { walls: S.walls, floorP: S.floorP, floorT: S.floorT, marble: S.marble, mantel: S.mantel, above: S.above, sofaF: S.sofaF, chairF: S.chairF, table: S.table, rug: S.rug, drapes: S.drapes, crown: S.crown };
+  return { items, catalog, finishes };
+}
 async function askAI(mode, text, image){
-  const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image }) });
+  const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, context: mode === 'scheme' ? aiContext() : undefined }) });
   const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'AI request failed'); return j;
 }
 function applyLook(o){
   if (o.walls) for (const g of Object.keys(o.walls)) S.walls[g] = o.walls[g];
   for (const k of ['floorP','floorT','marble','mantel','above','sofaF','chairF','table','rug','drapes','drapeColor','crown','sconces']) if (o[k] !== undefined) S[k] = o[k];
-  applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); refreshRugs();
-  loadedLabel = 'Described look'; dirty = true; renderPanel();
+  if (o.remove && o.remove.length) S.items = S.items.filter(i => !o.remove.includes(i.id));
+  if (o.move) for (const m of o.move) { const it = S.items.find(i => i.id === m.id); if (!it) continue; if (m.x != null) it.x = m.x; if (m.z != null) it.z = m.z; if (m.r != null) it.r = m.r; }
+  if (o.add) for (const a of o.add) if (getCat(a.t)) S.items.push({ t: a.t, x: a.x, z: a.z, r: a.r || 0, id: 'i' + (uid++) });
+  applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); setSelected(null); rebuildItems();
+  dirty = true; renderPanel();
 }
 let lookText = '', lookFile = null;
 async function shrinkImage(file){
