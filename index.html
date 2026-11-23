@@ -789,15 +789,16 @@ function renderPanel(){
     P_(h('div', { class: 'lbl' }, 'Showing: ' + loadedLabel, dirty ? h('span', { class: 'dirty' }, '• edited') : ''));
     { const ta = h('textarea', { placeholder: 'Describe changes, e.g. “darken the floors, remove the rugs, add a baby grand in the corner by the windows”', style: 'width:100%;min-height:62px;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;box-sizing:border-box' });
       ta.value = lookText; ta.oninput = () => lookText = ta.value;
-      const fin = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
-      const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference photo: ' + lookFile.name : '');
-      fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference photo: ' + lookFile.name : ''; };
+      const fin = h('input', { type: 'file', accept: 'image/*,application/pdf', style: 'display:none' });
+      const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference: ' + lookFile.name : '');
+      fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference: ' + lookFile.name : ''; };
       const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Make the changes');
       go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; } go.disabled = true; go.textContent = 'Designing…';
-        try { const img = lookFile ? await toDataUrl(lookFile) : null; const o = await askAI('scheme', lookText.trim(), img); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
+        try { let files; if (lookFile) { const isPdf = lookFile.type === 'application/pdf'; const blob = isPdf ? lookFile : await shrinkImage(lookFile); const up = await uploadFile(blob, lookFile.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); files = [{ path: up.path }]; }
+          const o = await askAI('scheme', lookText.trim(), null, files); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
         catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
-      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo'), go), fin, st,
-        h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). A magazine photo works as a reference. Save it as a version if you like it.')); }
+      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo / PDF'), go), fin, st,
+        h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). A magazine photo or a PDF (designer deck, catalog page) works as a reference. Save it as a version if you like it.')); }
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
     const vs = allVersions();
@@ -897,8 +898,8 @@ function aiContext(){
   const finishes = { walls: S.walls, floorP: S.floorP, floorT: S.floorT, marble: S.marble, mantel: S.mantel, above: S.above, sofaF: S.sofaF, chairF: S.chairF, table: S.table, rug: S.rug, drapes: S.drapes, crown: S.crown };
   return { items, catalog, finishes };
 }
-async function askAI(mode, text, image){
-  const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, context: mode === 'scheme' ? aiContext() : undefined }) });
+async function askAI(mode, text, image, files){
+  const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, files, context: mode === 'scheme' ? aiContext() : undefined }) });
   const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'AI request failed'); return j;
 }
 function applyLook(o){
@@ -930,11 +931,13 @@ function itemDlg(ci){
   const F = {}; const inp = (k, attrs = {}) => (F[k] = h('input', { ...attrs }));
   // photo
   const prevImg = h('img', { alt: '', style: 'width:96px;height:96px' }); const photoStat = h('div', { class: 'stat', style: 'flex:1;margin:0' });
-  const photoIn = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
-  const photoBtn = h('button', { class: 'btn sec', style: 'width:auto;padding:9px 12px' }, pic(ci) ? 'Change photo' : 'Add photo');
+  const photoIn = h('input', { type: 'file', accept: 'image/*,application/pdf', style: 'display:none' });
+  const photoBtn = h('button', { class: 'btn sec', style: 'width:auto;padding:9px 12px' }, pic(ci) ? 'Change photo' : 'Add photo or PDF');
   photoBtn.onclick = () => photoIn.click();
   const showPrev = src => { if (src) { prevImg.src = src; prevImg.style.display = ''; } else prevImg.style.display = 'none'; }; showPrev(pic(ci));
-  photoIn.onchange = () => { const f = photoIn.files[0]; if (!f) return; photoFile = f; const local = URL.createObjectURL(f); showPrev(local); photoStat.textContent = 'Uploading…';
+  photoIn.onchange = () => { const f = photoIn.files[0]; if (!f) return;
+    if (f.type === 'application/pdf') { photoIn.value = ''; handleSpec(f); return; }
+    photoFile = f; const local = URL.createObjectURL(f); showPrev(local); photoStat.textContent = 'Uploading…';
     avgColor(local).then(c => { if (c && !ci.color) { col.value = c; useCol.checked = true; } });
     const job = (async () => { const b = await shrinkImage(f); const j = await uploadFile(b, f.name, b.type || f.type || 'image/jpeg'); ci.photo = j.path; photoStat.textContent = 'Photo added'; photoBtn.textContent = 'Change photo'; })()
       .catch(e => { photoStat.textContent = e.message; }).finally(() => pending.delete(job)); pending.add(job); };
@@ -943,23 +946,26 @@ function itemDlg(ci){
   const specStat = h('div', { class: 'stat', style: 'flex:1;margin:0' }, ci.spec ? ci.spec.name : 'No spec sheet yet');
   const specBtn = h('button', { class: 'btn sec', style: 'width:auto;padding:9px 12px' }, ci.spec ? 'Replace' : 'Attach PDF');
   specBtn.onclick = () => specIn.click();
-  specIn.onchange = () => { const f = specIn.files[0]; if (!f) return; specStat.textContent = 'Uploading ' + f.name + '…';
+  specIn.onchange = () => { const f = specIn.files[0]; if (f) handleSpec(f); };
+  function handleSpec(f){ specStat.textContent = 'Uploading ' + f.name + '…';
     const job = (async () => { let b = f, type = f.type || 'application/pdf'; if (type.startsWith('image/')) { b = await shrinkImage(f); type = b.type || 'image/jpeg'; }
       const j = await uploadFile(b, f.name, type); ci.spec = { path: j.path, name: f.name, type }; specStat.textContent = f.name; specBtn.textContent = 'Replace'; })()
-      .catch(e => { specStat.textContent = e.message; }).finally(() => pending.delete(job)); pending.add(job); };
-  const desc = h('textarea', { placeholder: 'Optional. Describe it and I’ll fill in the rest, e.g. “curved bouclé sofa about 8 feet, warm white”. Works with the photo too.', style: 'min-height:56px' });
+      .catch(e => { specStat.textContent = e.message; }).finally(() => pending.delete(job)); pending.add(job); }
+  const desc = h('textarea', { placeholder: 'Optional. Describe it, or add a photo or spec sheet below, then tap Fill in. E.g. “curved bouclé sofa about 8 feet, warm white”.', style: 'min-height:56px' });
   const aiStat = h('div', { class: 'stat' });
   const aiBtn = h('button', { class: 'btn', style: 'width:auto;padding:9px 12px;flex:none' }, '✨ Fill in');
   let photoFile = null;
   aiBtn.onclick = async () => {
-    const t = desc.value.trim(); if (!t && !photoFile) { aiStat.textContent = 'Type a description or add a photo first.'; desc.focus(); return; }
-    aiBtn.disabled = true; aiStat.textContent = 'Working it out…';
-    try { const img = photoFile ? await toDataUrl(photoFile) : null; const o = await askAI('item', t, img);
+    if (pending.size) { aiStat.textContent = 'Finishing upload…'; await Promise.allSettled([...pending]); }
+    const files = [ci.photo, ci.spec && ci.spec.path].filter(Boolean).map(path => ({ path }));
+    const t = desc.value.trim(); if (!t && !files.length && !photoFile) { aiStat.textContent = 'Type a description, or add a photo or spec sheet first.'; desc.focus(); return; }
+    aiBtn.disabled = true; aiStat.textContent = files.length ? 'Reading your files…' : 'Working it out…';
+    try { const img = !ci.photo && photoFile ? await toDataUrl(photoFile) : null; const o = await askAI('item', t, img, files);
       if (o.name && (!name.value || isNew)) name.value = o.name; if (o.kind) { kind.value = o.kind; kindHint(); }
       if (o.w) W_.value = o.w; if (o.d) D_.value = o.d; if (o.h && o.kind !== 'rug') H_.value = o.h; ci._dimsTouched = true;
       if (o.color) { col.value = o.color; useCol.checked = true; }
       if (o.notes && !notes.value) notes.value = (t ? t + '\n' : '') + o.notes;
-      aiStat.textContent = 'Filled in. Check the size before relying on it.';
+      aiStat.textContent = ci.spec ? 'Filled in from the spec sheet. Worth a quick check.' : 'Filled in. Check the size before relying on it.';
     } catch (e) { aiStat.textContent = e.message; } finally { aiBtn.disabled = false; }
   };
   const name = inp('name', { placeholder: 'e.g. Velvet sofa, 96″', value: ci.name || '', maxlength: '80' });

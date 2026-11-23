@@ -1,3 +1,4 @@
+import { get } from '@vercel/blob';
 // Turns a description and/or reference photo into either a furniture item or a room "look".
 // Auth: ANTHROPIC_API_KEY (direct) if set; otherwise Vercel AI Gateway via AI_GATEWAY_API_KEY or the deployment's OIDC token.
 const KINDS = ['sofa','sectional','chair','slipper','swivel','ottoman','coffee','roundtable','side','console','bench','bookcase','lamp','plant','rug','art','other'];
@@ -93,8 +94,22 @@ function cleanScheme(o, ctx) {
   return out;
 }
 
-async function viaAnthropic(sys, text, image, tool) {
-  const content = [];
+async function loadFiles(list) {
+  const blocks = [];
+  for (const f of (Array.isArray(list) ? list : []).slice(0, 4)) {
+    const p = String((f && f.path) || '');
+    if (!/^lr13ab\/files\/[a-z0-9]+\.(jpg|png|webp|gif|pdf)$/.test(p)) continue;
+    const r = await get(p, { access: 'private' }).catch(() => null);
+    if (!r || r.statusCode !== 200 || !r.stream) continue;
+    const data = Buffer.from(await new Response(r.stream).arrayBuffer()).toString('base64');
+    const type = r.blob.contentType || '';
+    if (type === 'application/pdf') blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } });
+    else if (type.startsWith('image/')) blocks.push({ type: 'image', source: { type: 'base64', media_type: type, data } });
+  }
+  return blocks;
+}
+async function viaAnthropic(sys, text, image, tool, fileBlocks = []) {
+  const content = [...fileBlocks];
   if (image) { const m = image.match(/^data:(image\/[a-z]+);base64,(.+)$/); if (m) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }); }
   content.push({ type: 'text', text: text || 'Use the photo.' });
   const models = (process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5,claude-sonnet-4-5').split(',');
@@ -111,6 +126,7 @@ async function viaAnthropic(sys, text, image, tool) {
 }
 async function viaGateway(sys, text, image, token) {
   const content = [{ type: 'text', text: text || 'Use the photo.' }];
+  // (PDF reading needs ANTHROPIC_API_KEY; the gateway path only sends the inline photo)
   if (image) content.push({ type: 'image_url', image_url: { url: image } });
   const models = (process.env.AI_MODEL || 'anthropic/claude-sonnet-5.5,anthropic/claude-sonnet-4.5,anthropic/claude-sonnet-4').split(',');
   let last;
@@ -133,10 +149,11 @@ export default async function handler(req, res) {
   const ctx = b.context && typeof b.context === 'object' ? b.context : {};
   if (mode === 'scheme') text = 'Request: ' + (text || '(see the photo)') + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
   const image = typeof b.image === 'string' && b.image.length < 3_500_000 && b.image.startsWith('data:image/') ? b.image : null;
-  if (!text && !image) return res.status(400).json({ error: 'Describe it or add a photo first' });
+  const hasFiles = Array.isArray(b.files) && b.files.length > 0;
+  if (!text && !image && !hasFiles) return res.status(400).json({ error: 'Describe it, or add a photo or PDF first' });
   try {
     let o;
-    if (process.env.ANTHROPIC_API_KEY) o = await viaAnthropic(SYS[mode], text, image, mode === 'scheme' ? SCHEME_TOOL : ITEM_TOOL);
+    if (process.env.ANTHROPIC_API_KEY) o = await viaAnthropic(SYS[mode] + (hasFiles ? '\nAttached files may include a product photo, a spec sheet or a reference image. Prefer exact dimensions, names and materials stated in a spec sheet over guesses.' : ''), text, image, mode === 'scheme' ? SCHEME_TOOL : ITEM_TOOL, hasFiles ? await loadFiles(b.files) : []);
     else {
       const token = process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN;
       if (!token) return res.status(503).json({ error: 'AI isn’t set up on this site yet' });
