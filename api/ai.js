@@ -2,7 +2,7 @@ import { get } from '@vercel/blob';
 // Turns a description and/or reference photo into either a furniture item or a room "look".
 // Auth: ANTHROPIC_API_KEY (direct) if set; otherwise Vercel AI Gateway via AI_GATEWAY_API_KEY or the deployment's OIDC token.
 const KINDS = ['sofa','sectional','chair','slipper','swivel','ottoman','coffee','roundtable','side','console','bench','bookcase','lamp','plant','rug','art','other'];
-const FINISHES = ['paint','limewash','molding','grasscloth','oak','walnut','trellis','stripe'];
+const FINISHES = ['paint','limewash','molding','wainscot','grasscloth','oak','walnut','trellis','stripe'];
 const MARBLES = ['calacatta','bardiglio','nero','verde','travertine','limestone'];
 const FABRICS = ['white','oatmeal','boucle','camel','sage','navy','navystripe','ticking','rust','mustard','blush','charcoal'];
 const FABRIC_NOTES = 'white = crisp white linen; boucle = cream boucle; navystripe = navy and ivory awning stripe; ticking = fine blue and ivory ticking stripe; others are solids';
@@ -26,9 +26,13 @@ Coordinates are in feet, seen from above: x runs 0 (fireplace wall, west) to 15.
 - Entry: square-headed opening on the south wall at x 2.45-7.5. East wall: solid from z 0 to 5.9 (corner window at z 0.25-2.25), then a ~9.3 ft square-headed opening to the kitchen (z 5.9-15.2) - nothing can sit in that opening.
 - Corners by the windows: north-west near (1.6, 1.4) (beside the fireplace) and north-east near (13.8, 1.4).
 Each piece has a position (x, z) at the centre of its footprint and a rotation r in degrees. At r=0 the front (seat or keyboard side) faces +z (south, toward the entry); r=180 faces the windows; r=-90 faces the fireplace; r=90 faces the dining room. Use the given footprints (w along local x, d along local z) to keep pieces inside the room, off each other, and at least 2.5 ft clear of walkways through the openings.
-To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall; "molding" = painted picture-frame wall panels (boiserie). Colours are #rrggbb. Keep wall colours realistic paint colours.
+To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall; "molding" = full-height painted picture-frame panels (boiserie); "wainscot" = panels below a chair rail with plain paint/limewash above. Colours are #rrggbb. Keep wall colours realistic paint colours.
 Fabrics: ${FABRIC_NOTES}; any solid #rrggbb also works.
-Two layers: the 3D mock-up (limited options above) and a photoreal render made by an image model from the 3D view, your render_brief and the user's reference images. Always use your design judgement and inference: approximate the request in 3D as well as the options allow (closest fabric/colour, closest piece type, sensible placement), AND write render_brief so the photoreal render shows exactly what was asked for (e.g. "a Pierre Paulin Pumpkin sofa in burnt-orange velvet in place of the sofa"). Never refuse or skip a request because the 3D options are limited; the render carries it.
+Two layers, ONE source of truth: the 3D mock-up (limited options above) is the layout - what piece is where - and the design spec says exactly how specific elements look in the photoreal render. Always use design judgement and inference:
+1. Change the 3D first, as close as the options allow (closest piece type and size, fabric/colour, finish, position). Add, remove or move 3D pieces so the 3D layout matches what the owner wants - e.g. "both sofas are Pumpkins" means both sofa pieces stay in the 3D and both get a spec entry.
+2. Then update the spec for anything the 3D cannot show exactly (a named product, a reference-image piece, a pattern, a material, a light fixture, wainscot with limewash above, etc.). Return the whole spec every time.
+3. The 3D and the spec must never contradict each other: if the spec says swivel chairs in shearling, the 3D should have swivel chairs, not lounge chairs.
+Never refuse or skip a request because the 3D options are limited; the spec carries it.
 Judgement rules:
 - Do every part of the request. If the user criticises something ("the paneling is weird", "too dark"), restyle it; do not just delete it unless they say remove.
 - If something can't be shown exactly with the available options, use the closest option AND say so in the summary (e.g. "Closest available stripe: navy awning stripe").
@@ -50,8 +54,11 @@ const SCHEME_TOOL = {
   description: 'Apply changes to the living-room mock-up. Include only the fields that should change.',
   input_schema: { type: 'object', properties: {
     summary: { type: 'string', description: 'One short sentence describing what changed' },
-    render_edit: { type: 'string', description: 'Edit instructions for a second, targeted pass by an image editor. It receives the finished room photo as image 1 and the reference images as images 2, 3, ... (reference N = image N+1). One imperative sentence per specific item that must look a particular way (a named product, a reference-image piece, a pattern, a material), e.g. "Replace the long sofa facing the fireplace with the exact sofa in image 2 (Pierre Paulin Pumpkin, pale grey), same position and orientation, scaled to the room." End with "Change nothing else." Cumulative: carry over still-wanted items from the current edit list. Empty string if nothing needs a targeted edit.' },
-    render_brief: { type: 'string', description: 'The full design brief for the photoreal render, rewritten to include the current brief plus this request. Describe every item the user has asked for in concrete, photographic terms (designer/model if known, shape, material, colour, pattern, scale) - especially anything the 3D options cannot show exactly. Mention which reference image (by number) shows each item. Max ~120 words.' },
+    spec: { type: 'array', description: 'The COMPLETE, updated design spec (replaces the current one). One entry per element of the room the owner has an opinion about that needs more than the 3D options can show, or that a reference image defines. Merge, never duplicate: if this request changes an element already in the spec, rewrite that entry; drop entries the owner no longer wants or that contradict this request. Keep entries that are still wanted, verbatim.',
+      items: { type: 'object', properties: {
+        what: { type: 'string', description: 'The element and where it is, matching the 3D layout, e.g. "Sofa along the east side, facing the fireplace", "Walls (all)", "Ceiling light, centre"' },
+        look: { type: 'string', description: 'Concrete, photographic description: product/designer if known, shape, material, colour, pattern, scale. Max ~40 words.' },
+        ref: { type: ['integer', 'null'], description: 'Reference image number that shows this element exactly, or null' } }, required: ['what', 'look'] } },
     walls: { type: 'object', description: 'Only the walls to change', properties: Object.fromEntries(['fire','window','entry','opening'].map(g => [g, { type: 'object', properties: { f: { type: 'string', enum: FINISHES }, c: { type: 'string' } }, required: ['f', 'c'] }])) },
     floorP: { type: 'string', enum: ['herringbone', 'plank', 'versailles'], description: 'versailles = square parquet panels with a framed diagonal lattice (Versailles / Chantilly panels); plank = straight boards' }, floorT: { type: 'string', description: 'wood tone #rrggbb; darker is lower lightness' },
     marble: { type: 'string', enum: MARBLES }, mantel: { type: 'string', enum: ['marble', 'walnut', 'none'] }, above: { type: 'string', enum: ABOVE },
@@ -82,8 +89,7 @@ function cleanItem(o) {
 }
 function cleanScheme(o, ctx) {
   const out = { summary: String(o.summary || '').slice(0, 300) };
-  if (typeof o.render_brief === 'string' && o.render_brief.trim()) out.renderBrief = o.render_brief.trim().slice(0, 1500);
-  if (typeof o.render_edit === 'string') out.renderEdit = o.render_edit.trim().slice(0, 1200);
+  if (Array.isArray(o.spec)) out.spec = o.spec.filter(x => x && x.what && x.look).slice(0, 16).map(x => ({ what: String(x.what).slice(0, 120), look: String(x.look).slice(0, 400), ref: Number.isInteger(x.ref) && x.ref > 0 ? x.ref : null }));
   const ids = new Set((ctx.items || []).map(i => String(i.id)));
   const types = new Set((ctx.catalog || []).map(c => String(c.t)));
   const num = (v, lo, hi, dflt) => { const n = parseFloat(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
@@ -162,7 +168,14 @@ export default async function handler(req, res) {
   const mode = b.mode === 'scheme' ? 'scheme' : 'item';
   let text = String(b.text || '').slice(0, 2000);
   const ctx = b.context && typeof b.context === 'object' ? b.context : {};
-  if (mode === 'scheme') text = 'Request: ' + (text || '(see the attached references)') + (Array.isArray(b.files) && b.files.length ? `\n(${b.files.length} reference file(s) attached; in the render they will be numbered after the existing references: ${(ctx.refCount || 0) + 1}..${(ctx.refCount || 0) + b.files.length})` : '') + '\n\nCurrent render brief: ' + String(ctx.renderBrief || '(none yet)').slice(0, 1500) + '\n\nCurrent edit list: ' + String(ctx.renderEdit || '(none)').slice(0, 1200) + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
+  if (mode === 'scheme') {
+    const nRefs = Number(ctx.refCount) || 0, nNew = Array.isArray(b.files) ? b.files.length : 0;
+    const spec = Array.isArray(ctx.spec) ? ctx.spec.slice(0, 16) : [];
+    text = 'Request: ' + (text || '(see the attached references)')
+      + (nNew ? `\n(${nNew} new file(s) attached. Existing reference images are numbered 1-${nRefs}; the new attachments are numbered ${nRefs + 1}-${nRefs + nNew} in attach order. PDFs get a number too but are never shown to the image model, so only use a PDF's number if it is a photo-like page; otherwise describe it in words.)` : (nRefs ? `\n(Existing reference images: 1-${nRefs}.)` : ''))
+      + '\n\nCurrent design spec: ' + (spec.length ? JSON.stringify(spec) : '(empty)')
+      + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
+  }
   const image = typeof b.image === 'string' && b.image.length < 3_500_000 && b.image.startsWith('data:image/') ? b.image : null;
   const hasFiles = Array.isArray(b.files) && b.files.length > 0;
   if (!text && !image && !hasFiles) return res.status(400).json({ error: 'Describe it, or add a photo or PDF first' });

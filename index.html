@@ -140,7 +140,7 @@ function canvasTex(key, w, h, draw, opts = {}){
 const WALL_COLORS = [
   ['Warm white','#EDE8DE'],['Soft greige','#D8D0C3'],['Mushroom','#BBAE9E'],['Plaster pink','#E2C6B8'],
   ['Sage','#A9B39A'],['Deep teal','#2F5653'],['Ink blue','#2A3447'],['Ochre','#C99A55'],['Charcoal','#3B3A38']];
-const FINISHES = [['paint','Paint'],['limewash','Limewash'],['molding','Panel molding'],['grasscloth','Grasscloth'],['oak','Oak paneling'],['walnut','Walnut paneling'],['trellis','Trellis paper'],['stripe','Stripe paper']];
+const FINISHES = [['paint','Paint'],['limewash','Limewash'],['molding','Panel molding'],['wainscot','Wainscot + paint above'],['grasscloth','Grasscloth'],['oak','Oak paneling'],['walnut','Walnut paneling'],['trellis','Trellis paper'],['stripe','Stripe paper']];
 const WALL_GROUPS = [['fire','Fireplace wall'],['window','Window wall'],['entry','Entry wall'],['opening','Kitchen-side wall']];
 const FLOOR_TONES = [['Smoked oak','#6E5644'],['Dark walnut','#4B3528'],['Ebonized oak','#2F2822'],['Natural white oak','#B8996F'],['Pale oak','#D4BF9E']];
 const MARBLES = [['calacatta','Calacatta','#EEEAE2'],['bardiglio','Bardiglio','#8E959B'],['nero','Nero Marquina','#202021'],['verde','Verde','#2A4034'],['travertine','Travertine','#D9C9AE'],['limestone','Limestone','#E0D8C8']];
@@ -173,7 +173,7 @@ function wallMap(f, color){
           x.fillStyle = 'rgba(0,0,0,.45)'; x.fillRect(b*bw, 0, 3, h); }
       }), tile: [4, 8.5], fixed: true };
     }
-    case 'molding': return { map: canvasTex(k + 'v2', 640, 1088, (x, w, h) => {
+    case 'wainscot': case 'molding': return { map: canvasTex(k + 'v2', 640, 1088, (x, w, h) => {
       // painted boiserie: 5 ft bays, chair rail at 2'-10", shallow picture-frame molding lit from above
       const ppf = 128; x.fillStyle = color; x.fillRect(0,0,w,h);
       const Y = y => (8.5 - y)*ppf;
@@ -185,7 +185,7 @@ function wallMap(f, color){
         x.fillStyle = rgba(shade(color, .1), .8); x.fillRect(X0, T, X1 - X0, 2); };
       // chair rail
       x.fillStyle = rgba(shade(color, .04), 1); x.fillRect(0, Y(2.92), w, 16); x.fillStyle = rgba(shade(color, -.15), .55); x.fillRect(0, Y(2.92) + 16, w, 3); x.fillStyle = rgba(shade(color, .1), .9); x.fillRect(0, Y(2.92), w, 2);
-      frame(.45, .55, 4.55, 2.45); frame(.45, 3.35, 4.55, 7.6);
+      frame(.45, .55, 4.55, 2.45); if (f === 'molding') frame(.45, 3.35, 4.55, 7.6);
     }), tile: [5, 8.5] };
     case 'trellis': return { map: canvasTex(k, 384, 384, (x, w, h) => {
       x.fillStyle = color; x.fillRect(0,0,w,h); const m = lum(color) < .45 ? shade(color, .2) : shade(color, -.17);
@@ -697,7 +697,7 @@ const PRESETS = [
 ];
 let uid = 1; const withIds = items => items.map(i => ({ ...i, id: 'i' + (uid++) }));
 let S = null; let loadedLabel = ''; let dirty = false;
-function loadState(s, label){ S = JSON.parse(JSON.stringify(s)); S.items = withIds(S.items.map(({ id, ...r }) => r)); loadedLabel = label; dirty = false; sel = null; applyAll(); renderPanel(); }
+function loadState(s, label){ S = JSON.parse(JSON.stringify(s)); if (!S.spec) S.spec = S.renderBrief ? [{ what: 'Overall design', look: S.renderBrief, refPath: null }] : []; delete S.renderBrief; delete S.renderEdit; delete S.renderRefs; S.items = withIds(S.items.map(({ id, ...r }) => r)); loadedLabel = label; dirty = false; sel = null; applyAll(); renderPanel(); }
 function snapshot(){ const s = JSON.parse(JSON.stringify(S)); s.items = s.items.map(({ id, ...r }) => ({ ...r, x: +r.x.toFixed(2), z: +r.z.toFixed(2) })); return s; }
 function touch(){ if (!dirty) { dirty = true; renderPanel(); } }
 
@@ -812,7 +812,11 @@ function describeScene(){
   const fire = S.mantel === 'flush' ? 'firebox set flush in the plain wall with a slim marble hearth, no surround or shelf'
     : nm(MARBLES, S.marble) + ' marble fireplace surround' + (S.mantel === 'none' ? ' with no shelf' : ' with a ' + (S.mantel === 'walnut' ? 'walnut' : 'matching marble') + ' mantel shelf');
   const above = String(S.above || '').startsWith('c:') ? 'the owner’s artwork' : nm(ABOVE, S.above).replace('Art · ', '').toLowerCase();
-  const furn = [...new Set(S.items.map(i => { const c = getCat(i.t); return c && c.name; }).filter(Boolean))].join(', ');
+  const where = it => { const x = +it.x, z = +it.z; const ns = z < 1 ? 'in the window bay' : z < 5 ? 'near the windows' : z > 11.5 ? 'near the entry wall' : 'mid-room';
+    const ew = x < 5 ? 'on the fireplace (west) side' : x > 10 ? 'on the kitchen (east) side' : 'centre';
+    const r = ((Math.round(it.r || 0) % 360) + 360) % 360; const face = r === 0 ? 'facing the entry' : r === 180 ? 'facing the windows' : r === 270 ? 'facing the fireplace' : r === 90 ? 'facing the kitchen' : '';
+    const c = getCat(it.t) || {}; const noFace = /rug|plant|lamp|side|round coffee|ottoman|pouf/i.test(c.name || ''); return [ns, ew, noFace ? '' : face].filter(Boolean).join(', '); };
+  const furn = S.items.map(i => { const c = getCat(i.t); return c ? c.name + ' (' + where(i) + ')' : null; }).filter(Boolean).join('; ');
   return [
     'Walls — ' + wallTxt + (S.crown ? '; classical crown molding' : '') + '.',
     'Floor — ' + floorTone + ' wood in ' + (S.floorP === 'herringbone' ? 'herringbone' : S.floorP === 'versailles' ? 'Versailles parquet panels (square panels with a framed diagonal lattice)' : 'straight planks') + '.',
@@ -833,12 +837,22 @@ function captureView(){
   return { image: c.toDataURL('image/jpeg', .9), w: c.width, h: c.height };
 }
 function nearestAR(w, h){ const r = w / h; return [['16:9', 16/9], ['3:2', 1.5], ['4:3', 4/3], ['1:1', 1], ['3:4', .75], ['2:3', 2/3], ['9:16', 9/16]].reduce((a, b) => Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a)[0]; }
-let rendering = null, renderExtra = '';
+let rendering = null;
+// The design spec: one entry per element the owner has defined beyond the 3D options. {what, look, refPath}
+const specRefs = () => [...new Set((S.spec || []).map(x => x.refPath).filter(Boolean))];
+function specView(){
+  const sp = S.spec || [], refs = specRefs();
+  if (!sp.length) return h('div', { class: 'note', style: 'margin:0' }, 'Nothing beyond the 3D yet. Describe changes or attach photos above; anything the 3D can’t show exactly is listed here and goes into the photoreal render.');
+  return h('div', { style: 'display:flex;flex-direction:column;gap:6px' }, sp.map((x, i) => { const del = h('button', { class: 'x', title: 'Remove from spec' }, '×');
+    del.onclick = () => { S.spec = sp.filter((_, k) => k !== i); touch(); renderPanel(); };
+    return h('div', { class: 'card', style: 'margin:0;align-items:flex-start;gap:8px' }, x.refPath ? h('img', { src: fileUrl(x.refPath), alt: '', style: 'width:44px;height:44px;object-fit:cover;border-radius:6px;flex:none' }) : '',
+      h('div', { class: 'grow' }, h('div', { class: 't', style: 'font-size:13px' }, x.what), h('div', { class: 'd' }, x.look)), del); }));
+}
 async function photoreal(){
   if (rendering) return; const cap = captureView();
   rendering = { t0: Date.now(), preview: cap.image, status: 'starting' }; renderPanel();
   try {
-    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), brief: S.renderBrief || '', edit: S.renderEdit || '', refs: S.renderRefs || [], extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
+    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), spec: S.spec || [], ar: nearestAR(cap.w, cap.h) }) });
     const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
     const meta = encodeURIComponent(JSON.stringify({ view: VIEWS[curView] ? VIEWS[curView][0] : '', label: loadedLabel + (dirty ? ' (edited)' : ''), by: who }));
     for (;;) {
@@ -895,13 +909,14 @@ function renderPanel(){
             files = await Promise.all(lookFiles.map(async f => { const isPdf = f.type === 'application/pdf'; const blob = isPdf ? f : await shrinkImage(f); const up = await uploadFile(blob, f.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); return { path: up.path }; }));
             go.textContent = 'Designing…'; }
           const o = await askAI('scheme', lookText.trim(), null, files);
-          if (files) { const imgs = files.filter(f => !/\.pdf$/.test(f.path)).map(f => f.path); S.renderRefs = [...(S.renderRefs || []), ...imgs].slice(-6); }
+          o._newFiles = (files || []).map(f => f.path);
           applyLook(o); lookFiles = []; lastSummary = o.summary || 'Look applied.'; renderPanel(); }
         catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
       const sumBox = lastSummary ? h('div', { class: 'card', style: 'margin-top:8px;display:block' }, h('div', { class: 'd', style: 'font-size:13px;color:var(--ink)' }, lastSummary),
         h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', style: 'width:auto', on: () => { lastSummary = ''; tab = 'render'; renderPanel(); photoreal(); } }, '✨ See it photoreal'), h('button', { class: 'btn sec', style: 'width:auto', on: () => { lastSummary = ''; renderPanel(); } }, 'Dismiss'))) : '';
       P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photos / PDFs'), go), fin, st, sumBox,
         h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). Attach up to 6 photos or PDFs (magazine pages, designer deck, catalog pages) as references. Save it as a version if you like it.')); }
+    P_(lbl('Design spec · what the photoreal render adds to the 3D'), specView());
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
     const vs = allVersions();
@@ -914,15 +929,8 @@ function renderPanel(){
     P_(h('div', { class: 'note' }, 'Room geometry is from the plan, with the owner’s Nov 2026 changes: 15′-3″ wide with the window bay, fireplace set flush in the west wall, square-headed openings (4′-5″ to dining, 5′-0″ to the entry, ~9′-4″ to the kitchen after the extra 2′ of wall by the corner window). Ceiling 8′-6″ and opening heights 7′-0″ are assumptions.'));
   }
   if (tab === 'render') {
-    P_(h('div', { class: 'note', style: 'margin-top:0' }, 'Sends exactly what you see in the 3D view (camera, furniture, finishes) to an image model and turns it into a photo-style render. Geometry is locked to the model; set up the view first. Takes about 30–60 seconds; renders are shared with everyone who has the link.'));
-    const ex = h('input', { placeholder: 'Optional extra direction, e.g. “late afternoon sun, books on the coffee table”', maxlength: '300' }); ex.value = renderExtra; ex.oninput = () => renderExtra = ex.value;
-    ex.style.cssText = 'width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;margin:8px 0';
-    P_(ex);
-    if (S.renderBrief || (S.renderRefs || []).length) {
-      P_(lbl('Design brief carried into the render'), h('div', { class: 'note', style: 'margin:0 0 6px;color:var(--ink)' }, S.renderBrief || ''),
-        (S.renderRefs || []).length ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px' }, S.renderRefs.map((p, i) => h('div', { style: 'position:relative' }, h('img', { src: fileUrl(p), alt: '', style: 'width:56px;height:56px;object-fit:cover;border-radius:6px;display:block' }), h('span', { style: 'position:absolute;left:3px;top:2px;font-size:10px;background:rgba(255,255,255,.85);border-radius:4px;padding:0 3px' }, 'ref ' + (i + 1))))) : '',
-        h('button', { class: 'btn sec', style: 'width:auto', on: () => { S.renderBrief = ''; S.renderEdit = ''; S.renderRefs = []; touch(); renderPanel(); } }, 'Clear brief & references'));
-    }
+    P_(h('div', { class: 'note', style: 'margin-top:0' }, 'Turns the current 3D view into a photo: same camera and furniture layout, with the design spec below applied. Pieces from your photos are placed in a second step. 45–90 seconds; renders are shared with everyone who has the link.'));
+    P_(lbl('Design spec'), specView(), h('div', { class: 'note', style: 'margin:4px 0 8px' }, 'To change anything, use Describe changes on the Schemes tab. The render follows the 3D layout plus this spec.'));
     if (rendering) P_(h('div', { class: 'card' }, h('img', { src: rendering.preview, alt: '', style: 'width:84px;border-radius:6px;opacity:.6' }), h('div', { class: 'grow' }, h('div', { class: 't' }, 'Rendering…'), h('div', { class: 'd' }, rendering.status + ' · ' + Math.round((Date.now() - rendering.t0)/1000) + 's'))));
     else P_(h('button', { class: 'btn', on: photoreal }, '✨ Render this view'));
     const rs = (store.renders || []).slice().reverse();
@@ -1018,7 +1026,7 @@ function aiContext(){
   const catalog = [...Object.entries(CATALOG).map(([t, c]) => ({ t, name: c.name, w: c.w, d: c.d })),
     ...(store.items || []).filter(ci => ci.kind !== 'art').map(ci => ({ t: 'c:' + ci.id, name: ci.name + ' (their own item)', w: +(ci.w/12).toFixed(1), d: +(ci.d/12).toFixed(1) }))];
   const finishes = { walls: S.walls, floorP: S.floorP, floorT: S.floorT, marble: S.marble, mantel: S.mantel, above: S.above, sofaF: S.sofaF, chairF: S.chairF, table: S.table, rug: S.rug, drapes: S.drapes, crown: S.crown };
-  return { items, catalog, finishes, renderBrief: S.renderBrief || '', renderEdit: S.renderEdit || '', refCount: (S.renderRefs || []).length };
+  return { items, catalog, finishes, spec: (S.spec || []).map(x => ({ what: x.what, look: x.look, ref: x.refPath ? specRefs().indexOf(x.refPath) + 1 : null })), refCount: specRefs().length };
 }
 async function askAI(mode, text, image, files){
   const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, files, context: mode === 'scheme' ? aiContext() : undefined }) });
@@ -1030,8 +1038,8 @@ function applyLook(o){
   if (o.remove && o.remove.length) S.items = S.items.filter(i => !o.remove.includes(i.id));
   if (o.move) for (const m of o.move) { const it = S.items.find(i => i.id === m.id); if (!it) continue; if (m.x != null) it.x = m.x; if (m.z != null) it.z = m.z; if (m.r != null) it.r = m.r; }
   if (o.add) for (const a of o.add) if (getCat(a.t)) S.items.push({ t: a.t, x: a.x, z: a.z, r: a.r || 0, id: 'i' + (uid++) });
-  if (o.renderBrief) S.renderBrief = o.renderBrief;
-  if (o.renderEdit !== undefined) S.renderEdit = o.renderEdit;
+  if (Array.isArray(o.spec)) { const all = [...specRefs(), ...(o._newFiles || [])];
+    S.spec = o.spec.map(x => { const rp = x.ref ? all[x.ref - 1] : null; return { what: x.what, look: x.look, refPath: rp && !/\.pdf$/.test(rp) ? rp : null }; }); }
   applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); setSelected(null); rebuildItems();
   dirty = true; renderPanel();
 }
