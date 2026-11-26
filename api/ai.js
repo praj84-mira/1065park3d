@@ -4,7 +4,8 @@ import { get } from '@vercel/blob';
 const KINDS = ['sofa','sectional','chair','slipper','swivel','ottoman','coffee','roundtable','side','console','bench','bookcase','lamp','plant','rug','art','other'];
 const FINISHES = ['paint','limewash','molding','grasscloth','oak','walnut','trellis','stripe'];
 const MARBLES = ['calacatta','bardiglio','nero','verde','travertine','limestone'];
-const FABRICS = ['oatmeal','boucle','camel','sage','navy','rust','mustard','blush','charcoal'];
+const FABRICS = ['white','oatmeal','boucle','camel','sage','navy','navystripe','ticking','rust','mustard','blush','charcoal'];
+const FABRIC_NOTES = 'white = crisp white linen; boucle = cream boucle; navystripe = navy and ivory awning stripe; ticking = fine blue and ivory ticking stripe; others are solids';
 const TABLES = ['walnut','oak','travertine','lacquer'];
 const RUGS = ['ivory','vintage','blue','jute','charcoal'];
 const ABOVE = ['abstract','landscape','mirror','tv','none'];
@@ -25,7 +26,13 @@ Coordinates are in feet, seen from above: x runs 0 (fireplace wall, west) to 15.
 - Entry: square-headed opening on the south wall at x 2.45-7.5. East wall: solid from z 0 to 5.9 (corner window at z 0.25-2.25), then a ~9.3 ft square-headed opening to the kitchen (z 5.9-15.2) - nothing can sit in that opening.
 - Corners by the windows: north-west near (1.6, 1.4) (beside the fireplace) and north-east near (13.8, 1.4).
 Each piece has a position (x, z) at the centre of its footprint and a rotation r in degrees. At r=0 the front (seat or keyboard side) faces +z (south, toward the entry); r=180 faces the windows; r=-90 faces the fireplace; r=90 faces the dining room. Use the given footprints (w along local x, d along local z) to keep pieces inside the room, off each other, and at least 2.5 ft clear of walkways through the openings.
-To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall. Colours are #rrggbb. Keep wall colours realistic paint colours.`
+To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall; "molding" = painted picture-frame wall panels (boiserie). Colours are #rrggbb. Keep wall colours realistic paint colours.
+Fabrics: ${FABRIC_NOTES}; any solid #rrggbb also works.
+Judgement rules:
+- Do every part of the request. If the user criticises something ("the paneling is weird", "too dark"), restyle it; do not just delete it unless they say remove.
+- If something can't be shown exactly with the available options, use the closest option AND say so in the summary (e.g. "Closest available stripe: navy awning stripe").
+- If reference photos or PDFs are attached, read them closely (material, colour, pattern, dimensions) and match them.
+- The summary should list each change in a few words.`
 };
 
 function extractJson(t) {
@@ -108,19 +115,22 @@ async function loadFiles(list) {
   }
   return blocks;
 }
-async function viaAnthropic(sys, text, image, tool, fileBlocks = []) {
+async function viaAnthropic(sys, text, image, tool, fileBlocks = [], gatewayToken = null) {
   const content = [...fileBlocks];
   if (image) { const m = image.match(/^data:(image\/[a-z]+);base64,(.+)$/); if (m) content.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } }); }
   content.push({ type: 'text', text: text || 'Use the photo.' });
-  const models = (process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5,claude-sonnet-4-5').split(',');
+  const models = gatewayToken ? (process.env.AI_MODEL_MESSAGES || 'anthropic/claude-opus-5.5,anthropic/claude-sonnet-5.5,anthropic/claude-opus-5,anthropic/claude-sonnet-5,anthropic/claude-sonnet-4.5').split(',')
+    : (process.env.ANTHROPIC_MODEL || 'claude-opus-5-5,claude-sonnet-5-5,claude-sonnet-4-5').split(',');
+  const url = gatewayToken ? 'https://ai-gateway.vercel.sh/v1/messages' : 'https://api.anthropic.com/v1/messages';
+  const auth = gatewayToken ? { authorization: 'Bearer ' + gatewayToken } : { 'x-api-key': process.env.ANTHROPIC_API_KEY };
   let last;
   for (const model of models) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: model.trim(), max_tokens: 2000, system: sys, tools: [tool], tool_choice: { type: 'tool', name: tool.name }, messages: [{ role: 'user', content }] }), signal: AbortSignal.timeout(50000) });
+    const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...auth, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: model.trim(), max_tokens: 2000, system: sys, tools: [tool], tool_choice: { type: 'tool', name: tool.name }, messages: [{ role: 'user', content }] }), signal: AbortSignal.timeout(100000) });
     const j = await r.json().catch(() => ({}));
     if (r.ok) { const tu = (j.content || []).find(c => c.type === 'tool_use'); if (tu && tu.input) return tu.input; return extractJson((j.content || []).map(c => c.text || '').join('')); }
     last = (j.error && j.error.message) || ('HTTP ' + r.status);
-    if (r.status !== 404 && !/model/i.test(last)) break;
+    if (r.status === 401 || r.status === 403 || (r.status !== 404 && !/model/i.test(String(last)))) break;
   }
   throw new Error(last);
 }
@@ -157,7 +167,14 @@ export default async function handler(req, res) {
     else {
       const token = process.env.AI_GATEWAY_API_KEY || req.headers['x-vercel-oidc-token'] || process.env.VERCEL_OIDC_TOKEN;
       if (!token) return res.status(503).json({ error: 'AI isn’t set up on this site yet' });
-      o = await viaGateway(SYS[mode] + '\nReply with only a JSON object matching this schema, no comments: ' + JSON.stringify((mode === 'scheme' ? SCHEME_TOOL : ITEM_TOOL).input_schema), text, image, token);
+      const fileBlocks = hasFiles ? await loadFiles(b.files) : [];
+      try {
+        // Messages API through the gateway: same tool call as direct, and it can read attached photos and PDFs
+        o = await viaAnthropic(SYS[mode] + (hasFiles ? '\nAttached files may include a product photo, a spec sheet or a reference image. Prefer exact dimensions, names and materials stated in a spec sheet over guesses.' : ''), text, image, mode === 'scheme' ? SCHEME_TOOL : ITEM_TOOL, fileBlocks, token);
+      } catch (e) {
+        if (hasFiles) throw e; // don't silently drop the attachments
+        o = await viaGateway(SYS[mode] + '\nReply with only a JSON object matching this schema, no comments: ' + JSON.stringify((mode === 'scheme' ? SCHEME_TOOL : ITEM_TOOL).input_schema), text, image, token);
+      }
     }
     return res.status(200).json(mode === 'scheme' ? cleanScheme(o, ctx) : cleanItem(o));
   } catch (e) {

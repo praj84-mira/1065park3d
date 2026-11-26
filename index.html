@@ -144,7 +144,7 @@ const FINISHES = [['paint','Paint'],['limewash','Limewash'],['molding','Panel mo
 const WALL_GROUPS = [['fire','Fireplace wall'],['window','Window wall'],['entry','Entry wall'],['opening','Kitchen-side wall']];
 const FLOOR_TONES = [['Smoked oak','#6E5644'],['Dark walnut','#4B3528'],['Ebonized oak','#2F2822'],['Natural white oak','#B8996F'],['Pale oak','#D4BF9E']];
 const MARBLES = [['calacatta','Calacatta','#EEEAE2'],['bardiglio','Bardiglio','#8E959B'],['nero','Nero Marquina','#202021'],['verde','Verde','#2A4034'],['travertine','Travertine','#D9C9AE'],['limestone','Limestone','#E0D8C8']];
-const FABRICS = [['oatmeal','Oatmeal linen','#CFC3AE',0.95],['boucle','Cream bouclé','#ECE5D8',1],['camel','Camel leather','#9C6A3E',0.42],['sage','Sage velvet','#7E8C70',0.78],['navy','Navy velvet','#27324A',0.78],['rust','Rust velvet','#97492D',0.78],['mustard','Mustard','#B98F35',0.85],['blush','Blush','#D4AE9F',0.9],['charcoal','Charcoal','#46444A',0.9]];
+const FABRICS = [['white','White linen','#F4F2EC',0.95],['oatmeal','Oatmeal linen','#CFC3AE',0.95],['boucle','Cream bouclé','#ECE5D8',1],['camel','Camel leather','#9C6A3E',0.42],['sage','Sage velvet','#7E8C70',0.78],['navy','Navy velvet','#27324A',0.78],['navystripe','Navy awning stripe','#27324A',0.9,['#27324A','#EFEBE2',.5]],['ticking','Blue ticking','#4B6A8F',0.95,['#4B6A8F','#F1EEE6',.22]],['rust','Rust velvet','#97492D',0.78],['mustard','Mustard','#B98F35',0.85],['blush','Blush','#D4AE9F',0.9],['charcoal','Charcoal','#46444A',0.9]];
 const TABLES = [['walnut','Walnut','#5B3E2B'],['oak','White oak','#B08A60'],['travertine','Travertine','#D6C6AA'],['lacquer','Black lacquer','#1E1C1B']];
 const RUGS = [['ivory','Ivory, bordered','#E9E1D1'],['vintage','Vintage red','#8C2F2B'],['blue','Blue geometric','#3D5A80'],['jute','Jute','#B79A6E'],['charcoal','Charcoal abstract','#3A3937']];
 const DRAPE_COLORS = [['Ivory linen','#EEE7DA'],['Oatmeal','#CDBFA8'],['Sage','#8E9A80'],['Navy','#2B3550'],['Rust','#8E4A31'],['Charcoal','#4A4847']];
@@ -173,15 +173,20 @@ function wallMap(f, color){
           x.fillStyle = 'rgba(0,0,0,.45)'; x.fillRect(b*bw, 0, 3, h); }
       }), tile: [4, 8.5], fixed: true };
     }
-    case 'molding': return { map: canvasTex(k, 384, 1088, (x, w, h) => {
+    case 'molding': return { map: canvasTex(k + 'v2', 640, 1088, (x, w, h) => {
+      // painted boiserie: 5 ft bays, chair rail at 2'-10", shallow picture-frame molding lit from above
       const ppf = 128; x.fillStyle = color; x.fillRect(0,0,w,h);
-      const panel = (x0,y0,x1,y1) => { const X0 = x0*ppf, X1 = x1*ppf, Y0 = (8.5-y1)*ppf, Y1 = (8.5-y0)*ppf;
-        x.fillStyle = rgba(shade(color,-.025),1); x.fillRect(X0,Y0,X1-X0,Y1-Y0);
-        x.lineWidth = 9; x.strokeStyle = shade(color,-.07); x.strokeRect(X0,Y0,X1-X0,Y1-Y0);
-        x.lineWidth = 2.5; x.strokeStyle = shade(color,.07); x.strokeRect(X0-4,Y0-4,X1-X0+8,Y1-Y0+8);
-        x.lineWidth = 2; x.strokeStyle = shade(color,-.17); x.strokeRect(X0+5,Y0+5,X1-X0-10,Y1-Y0-10); };
-      panel(.3,.75,2.7,2.65); panel(.3,3.35,2.7,7.55);
-    }), tile: [3, 8.5] };
+      const Y = y => (8.5 - y)*ppf;
+      const frame = (x0, y0, x1, y1) => { const X0 = x0*ppf, X1 = x1*ppf, T = Y(y1), B = Y(y0), m = 10;
+        x.fillStyle = rgba(shade(color, .035), 1); x.fillRect(X0, T, X1 - X0, B - T);                 // molding face
+        x.fillStyle = color; x.fillRect(X0 + m, T + m, X1 - X0 - 2*m, B - T - 2*m);                   // field
+        x.fillStyle = rgba(shade(color, -.2), .75); x.fillRect(X0, B, X1 - X0 + 4, 4); x.fillRect(X1, T, 4, B - T + 4); // cast shadow
+        x.fillStyle = rgba(shade(color, -.15), .85); x.fillRect(X0 + m, T + m, X1 - X0 - 2*m, 3.5); x.fillRect(X0 + m, T + m, 3.5, B - T - 2*m); x.fillStyle = rgba(shade(color, .08), .9); x.fillRect(X0 + m, B - m - 2, X1 - X0 - 2*m, 2); // inner shadow + lit lip
+        x.fillStyle = rgba(shade(color, .1), .8); x.fillRect(X0, T, X1 - X0, 2); };
+      // chair rail
+      x.fillStyle = rgba(shade(color, .04), 1); x.fillRect(0, Y(2.92), w, 16); x.fillStyle = rgba(shade(color, -.15), .55); x.fillRect(0, Y(2.92) + 16, w, 3); x.fillStyle = rgba(shade(color, .1), .9); x.fillRect(0, Y(2.92), w, 2);
+      frame(.45, .55, 4.55, 2.45); frame(.45, 3.35, 4.55, 7.6);
+    }), tile: [5, 8.5] };
     case 'trellis': return { map: canvasTex(k, 384, 384, (x, w, h) => {
       x.fillStyle = color; x.fillRect(0,0,w,h); const m = lum(color) < .45 ? shade(color, .2) : shade(color, -.17);
       x.strokeStyle = m; x.lineWidth = 7; x.lineJoin = 'round'; const s = 192;
@@ -262,6 +267,8 @@ function marbleTex(id){
 }
 const woodTex = () => canvasTex('wood', 512, 512, (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0,0,w,h); const r = rng(9);
   for (let g = 0; g < 70; g++) { const y0 = r()*h, amp = 2 + r()*6, fr = .006 + r()*.01, ph = r()*6; x.beginPath(); x.moveTo(0, y0); for (let t = 0; t <= w; t += 10) x.lineTo(t, y0 + Math.sin(t*fr + ph)*amp); x.strokeStyle = `rgba(0,0,0,${.05 + r()*.1})`; x.lineWidth = .7 + r()*2; x.stroke(); } });
+const stripeTex = (c1, c2, frac) => canvasTex('st' + c1 + c2 + frac, 256, 256, (x, w, h) => { x.fillStyle = c2; x.fillRect(0,0,w,h); x.fillStyle = c1; x.fillRect(0, 0, w*frac, h);
+  if (frac < .3) { x.fillRect(w*.5, 0, w*frac*.35, h); } const r = rng(9); for (let i = 0; i < 7000; i++) { x.fillStyle = `rgba(0,0,0,${r()*.07})`; x.fillRect(r()*w|0, r()*h|0, 1 + (r()*2|0), 1); } }, { repeat: [frac < .3 ? 5 : 3, 1] });
 const fabricTex = () => canvasTex('fab', 256, 256, (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0,0,w,h); const r = rng(5);
   for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(0,0,0,${r()*.08})`; x.fillRect(r()*w|0, r()*h|0, 1 + (r()*2|0), 1); }
   for (let y = 0; y < h; y += 3) { x.fillStyle = 'rgba(0,0,0,.025)'; x.fillRect(0, y, w, 1); } }, { repeat: [3,3] });
@@ -699,7 +706,7 @@ function applyWalls(){ for (const [g] of WALL_GROUPS) { const w = S.walls[g], m 
   if (t.map) { t.map.repeat.set(1/t.tile[0], 1/t.tile[1]); m.map = t.map; m.color.set('#ffffff'); } else { m.map = null; m.color.set(w.c); }
   m.roughness = w.f === 'oak' || w.f === 'walnut' ? .6 : .92; m.needsUpdate = true; } }
 function applyFloor(){ MAT.floor.map = floorTex(S.floorP, S.floorT); MAT.floor.needsUpdate = true; }
-function applyFabrics(){ for (const [k, key] of [['sofa', 'sofaF'], ['chair', 'chairF']]) { const f = FABRICS.find(x => x[0] === S[key]) || (/^#[0-9a-f]{6}$/i.test(S[key] || '') ? ['custom', 'Custom', S[key], .85] : FABRICS[0]); const m = MAT[k]; m.color.set(f[2]); m.roughness = f[3]; m.map = f[0] === 'camel' ? null : fabricTex(); m.needsUpdate = true; }
+function applyFabrics(){ for (const [k, key] of [['sofa', 'sofaF'], ['chair', 'chairF']]) { const f = FABRICS.find(x => x[0] === S[key]) || (/^#[0-9a-f]{6}$/i.test(S[key] || '') ? ['custom', 'Custom', S[key], .85] : FABRICS[0]); const m = MAT[k]; m.color.set(f[4] ? '#ffffff' : f[2]); m.roughness = f[3]; m.map = f[4] ? stripeTex(...f[4]) : f[0] === 'camel' ? null : fabricTex(); m.needsUpdate = true; }
   const t = TABLES.find(x => x[0] === S.table) || TABLES[0]; MAT.table.color.set(t[0] === 'travertine' ? '#ffffff' : t[2]); MAT.table.map = t[0] === 'travertine' ? marbleTex('travertine') : t[0] === 'lacquer' ? null : woodTex(); MAT.table.roughness = t[0] === 'lacquer' ? .22 : t[0] === 'travertine' ? .6 : .5; MAT.table.needsUpdate = true; }
 function applyLight(){
   const eve = S && S.time === 'evening';
@@ -961,8 +968,8 @@ function renderPanel(){
     P_(h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn sec', on: () => confirmDlg('Remove all furniture?', () => { S.items = []; setSelected(null); rebuildItems(); touch(); }) }, 'Clear room')));
   }
   if (tab === 'fab') {
-    P_(lbl('Sofa / sectional'), h('div', { class: 'row' }, FABRICS.map(([k, n, c]) => sw(c, n, S.sofaF === k, () => set('sofaF', k, applyFabrics)))));
-    P_(lbl('Chairs, poufs & bench cushion'), h('div', { class: 'row' }, FABRICS.map(([k, n, c]) => sw(c, n, S.chairF === k, () => set('chairF', k, applyFabrics)))));
+    P_(lbl('Sofa / sectional'), h('div', { class: 'row' }, FABRICS.map(([k, n, c, , st]) => sw(c, n, S.sofaF === k, () => set('sofaF', k, applyFabrics), st ? `repeating-linear-gradient(90deg, ${st[0]} 0 ${st[2]*10}px, ${st[1]} ${st[2]*10}px 10px)` : null))));
+    P_(lbl('Chairs, poufs & bench cushion'), h('div', { class: 'row' }, FABRICS.map(([k, n, c, , st]) => sw(c, n, S.chairF === k, () => set('chairF', k, applyFabrics), st ? `repeating-linear-gradient(90deg, ${st[0]} 0 ${st[2]*10}px, ${st[1]} ${st[2]*10}px 10px)` : null))));
     P_(lbl('Tables'), h('div', { class: 'row' }, TABLES.map(([k, n, c]) => sw(c, n, S.table === k, () => set('table', k, applyFabrics)))));
     P_(lbl('Rug'), h('div', { class: 'row' }, RUGS.map(([k, n, c]) => sw(c, n, S.rug === k, () => set('rug', k, refreshRugs)))));
   }

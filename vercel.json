@@ -1,3 +1,21 @@
 {
-  "headers": [{ "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }]
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/ai.js": {
+      "maxDuration": 120
+    },
+    "api/render.js": {
+      "maxDuration": 60
+    }
+  }
 }
