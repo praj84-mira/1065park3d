@@ -100,7 +100,7 @@ header .sub{font-size:11px;color:var(--muted);margin-top:1px}
  <div id="loading">Building the room…</div>
  <header>
   <h1>Living Room · 13AB</h1>
-  <div class="sub">Directional mock-up · look and feel, not exact dimensions</div>
+  <div class="sub">Room geometry to plan · finishes and furniture are concepts</div>
   <div id="views"></div>
  </header>
  <div id="selbar"><span class="nm" id="selname"></span><button data-a="l">⟲ 15°</button><button data-a="r">⟳ 15°</button><button data-a="q">↻ 90°</button><button data-a="info" id="infobtn">Info</button><button data-a="dup">Copy</button><button data-a="del" class="del">Remove</button><button data-a="x">✕</button></div>
@@ -141,7 +141,7 @@ const WALL_COLORS = [
   ['Warm white','#EDE8DE'],['Soft greige','#D8D0C3'],['Mushroom','#BBAE9E'],['Plaster pink','#E2C6B8'],
   ['Sage','#A9B39A'],['Deep teal','#2F5653'],['Ink blue','#2A3447'],['Ochre','#C99A55'],['Charcoal','#3B3A38']];
 const FINISHES = [['paint','Paint'],['limewash','Limewash'],['molding','Panel molding'],['grasscloth','Grasscloth'],['oak','Oak paneling'],['walnut','Walnut paneling'],['trellis','Trellis paper'],['stripe','Stripe paper']];
-const WALL_GROUPS = [['fire','Fireplace wall'],['window','Window wall'],['entry','Entry wall'],['opening','Dining-side wall']];
+const WALL_GROUPS = [['fire','Fireplace wall'],['window','Window wall'],['entry','Entry wall'],['opening','Kitchen-side wall']];
 const FLOOR_TONES = [['Smoked oak','#6E5644'],['Dark walnut','#4B3528'],['Ebonized oak','#2F2822'],['Natural white oak','#B8996F'],['Pale oak','#D4BF9E']];
 const MARBLES = [['calacatta','Calacatta','#EEEAE2'],['bardiglio','Bardiglio','#8E959B'],['nero','Nero Marquina','#202021'],['verde','Verde','#2A4034'],['travertine','Travertine','#D9C9AE'],['limestone','Limestone','#E0D8C8']];
 const FABRICS = [['oatmeal','Oatmeal linen','#CFC3AE',0.95],['boucle','Cream bouclé','#ECE5D8',1],['camel','Camel leather','#9C6A3E',0.42],['sage','Sage velvet','#7E8C70',0.78],['navy','Navy velvet','#27324A',0.78],['rust','Rust velvet','#97492D',0.78],['mustard','Mustard','#B98F35',0.85],['blush','Blush','#D4AE9F',0.9],['charcoal','Charcoal','#46444A',0.9]];
@@ -397,9 +397,10 @@ const WALLS = [
   { g:'window', p0:[0,0], p1:[BAY0,0], h:H },
   { g:'window', p0:[BAY1,0], p1:[W,0], h:H },
   { g:'window', p0:[BAY0,0], p1:[BAY1,0], h:H, y0:BAYH, noBase:true },
-  { g:'opening', p0:[W,0], p1:[W,D], h:H, holes:[[0.25, 2.25, 2.6, 7.4]], doors:[[3.7, 15.2, 7.0, 0.5]] },
-  { g:'fire', p0:[0,D], p1:[0,0], h:H, holes:[[D-5.75, D-2.45, 1.0, 2.7]], doors:[[D-14.9, D-10.4, 6.8, 0.9]] },
-  { g:'entry', p0:[W,D], p1:[0,D], h:H, doors:[[W-7.5, W-2.4, 6.8, 1.0]] },
+  // Openings are square-headed (rise 0). Kitchen opening starts 2 ft further south than plan A-101 (owner change, Nov 2026).
+  { g:'opening', p0:[W,0], p1:[W,D], h:H, holes:[[0.25, 2.25, 2.6, 7.4]], doors:[[5.9, 15.2, 7.0, 0]] },
+  { g:'fire', p0:[0,D], p1:[0,0], h:H, holes:[[D-5.75, D-2.45, 1.0, 2.7]], doors:[[D-15.04, D-10.58, 7.0, 0]] },
+  { g:'entry', p0:[W,D], p1:[0,D], h:H, doors:[[W-7.48, W-2.45, 7.0, 0]] },
 ];
 const crownGroup = { visible: true }; const crownMeshes = []; const cutaways = [];
 for (const wd of WALLS) {
@@ -417,7 +418,7 @@ for (const wd of WALLS) {
     const c2 = new THREE.Mesh(new THREE.BoxGeometry(len, .09, .3), MAT.white); c2.position.set(len/2, H - .045, .15); c2.applyMatrix4(m); acc.add(c2); crownMeshes.push(c2);
     const c3 = new THREE.Mesh(new THREE.BoxGeometry(len, .06, .16), MAT.white); c3.position.set(len/2, H - .42, .08); c3.applyMatrix4(m); acc.add(c3); crownMeshes.push(c3); }
   // door casing + jambs (plain square-edge casing)
-  for (const dr of doors) { const c = .32; const outer = archPts(dr[0]-c, dr[1]+c, dr[2], dr[3] + c); const inner = archPts(dr[0], dr[1], dr[2], dr[3]).reverse();
+  for (const dr of doors) { const c = .32; const outer = dr[3] ? archPts(dr[0]-c, dr[1]+c, dr[2], dr[3] + c) : archPts(dr[0]-c, dr[1]+c, dr[2] + c, 0); const inner = archPts(dr[0], dr[1], dr[2], dr[3]).reverse();
     const cs = new THREE.Shape([...outer, ...inner]); const cm = new THREE.Mesh(new THREE.ShapeGeometry(cs), MAT.white); cm.position.z = .035; cm.applyMatrix4(m); cm.receiveShadow = true; acc.add(cm);
     const js = new THREE.Shape(archPts(dr[0], dr[1], dr[2], dr[3]).map(p => new THREE.Vector2(p.x, p.y === 0 ? -.02 : p.y)));
     const jg = new THREE.ExtrudeGeometry(js, { depth: .45, bevelEnabled: false, curveSegments: 24 }); const jm = new THREE.Mesh(jg, [MAT.hidden, MAT.jamb]); jm.position.z = -.45; jm.applyMatrix4(m); jm.receiveShadow = true; acc.add(jm); }
@@ -431,6 +432,10 @@ const recessed = []; for (const x of [3.8, 7.6, 11.4]) for (const z of [3.2, 7.4
 // adjacent spaces (simple planes so openings don't look into a void)
 function adjWall(p0, p1, h = H){ const { m, len } = wallMatrix(p0, p1); const pm = new THREE.Mesh(new THREE.PlaneGeometry(len, h), MAT.adj); pm.position.set(len/2, h/2, 0); pm.applyMatrix4(m); pm.receiveShadow = true; room.add(pm); }
 adjWall([W+14, D+3], [W+14, 3.3]); adjWall([W, 3.3], [W+14, 3.3]); adjWall([W+14, D+3], [W, D+3]);
+{ const cab = std({ color: '#E7E3DC', roughness: .6 }), top = std({ color: '#D9D6D0', roughness: .3 });
+  room.add(box(2.0, 3.0, 13, cab, W + 13, 1.5, 10.5)); room.add(box(2.1, .1, 13, top, W + 13, 3.05, 10.5));
+  room.add(box(1.1, 2.6, 13, cab, W + 13.45, 6.0, 10.5));
+  room.add(box(3.0, 3.0, 6.0, cab, W + 7.5, 1.5, 10.0)); room.add(box(3.2, .1, 6.2, top, W + 7.5, 3.05, 10.0)); }
 adjWall([W, D+6], [-14, D+6]); adjWall([-14, D+6], [-14, -2.2]); adjWall([-14, -0.6], [0, -0.6]); adjWall([W, D], [W, D+6]);
 // windows
 function frameBar(x0, x1, y0, y1, z0, z1){ const b = box(Math.abs(x1-x0), Math.abs(y1-y0), Math.abs(z1-z0), MAT.frame, (x0+x1)/2, (y0+y1)/2, (z0+z1)/2); room.add(b); }
@@ -456,11 +461,18 @@ function buildFireplace(){
   fireGroup.clear(); flames.length = 0; sconceLights = [];
   const mk = S.marble, zc = FIRE_Z; const z0 = 1.65, z1 = 6.55, fz0 = 2.45, fz1 = 5.75, top = 2.7, hdr = 3.95;
   MAT.marble.map = marbleTex(mk); MAT.marble.roughness = mk === 'travertine' || mk === 'limestone' ? .7 : .22; MAT.marble.needsUpdate = true;
+  if (S.mantel === 'flush') {
+    // firebox set flush in the plain wall, slim hearth only, no surround or shelf
+    fireGroup.add(box(.04, .12, fz1 - fz0 + .16, MAT.frame, .02, 1.0 - .06, zc)); fireGroup.add(box(.04, .12, fz1 - fz0 + .16, MAT.frame, .02, top + .06, zc));
+    fireGroup.add(box(.04, top - 1, .08, MAT.frame, .02, (1 + top)/2, fz0 - .04)); fireGroup.add(box(.04, top - 1, .08, MAT.frame, .02, (1 + top)/2, fz1 + .04));
+    fireGroup.add(box(1.25, .05, fz1 - fz0 + .9, MAT.marble, .625, .025, zc));
+  } else {
   fireGroup.add(box(.16, top, fz0 - z0, MAT.marble, .08, top/2, (z0 + fz0)/2));
   fireGroup.add(box(.16, top, z1 - fz1, MAT.marble, .08, top/2, (fz1 + z1)/2));
   fireGroup.add(box(.16, hdr - top, z1 - z0, MAT.marble, .08, (top + hdr)/2, zc + (z0 + z1)/2 - zc));
   fireGroup.add(box(1.5, .06, z1 - z0 + .3, MAT.marble, .75, .03, (z0 + z1)/2));
-  if (S.mantel !== 'none') { const mm = S.mantel === 'walnut' ? MAT.mantelWood : MAT.marble; fireGroup.add(rb(.72, .2, z1 - z0 + .5, .03, mm, .36, hdr + .1, (z0 + z1)/2)); fireGroup.add(box(.3, .12, z1 - z0 + .3, mm, .15, hdr - .06, (z0 + z1)/2)); }
+  }
+  if (S.mantel !== 'none' && S.mantel !== 'flush') { const mm = S.mantel === 'walnut' ? MAT.mantelWood : MAT.marble; fireGroup.add(rb(.72, .2, z1 - z0 + .5, .03, mm, .36, hdr + .1, (z0 + z1)/2)); fireGroup.add(box(.3, .12, z1 - z0 + .3, mm, .15, hdr - .06, (z0 + z1)/2)); }
   // firebox interior (see-through unit)
   const back = box(.05, top - 1, fz1 - fz0, MAT.firebox, -1.2, (1 + top)/2, zc); fireGroup.add(back);
   fireGroup.add(box(1.25, .05, fz1 - fz0, MAT.firebox, -.6, 1.0, zc)); fireGroup.add(box(1.25, top - 1, .04, MAT.firebox, -.6, (1 + top)/2, fz0)); fireGroup.add(box(1.25, top - 1, .04, MAT.firebox, -.6, (1 + top)/2, fz1)); fireGroup.add(box(1.25, .04, fz1 - fz0, MAT.firebox, -.6, top, zc));
@@ -702,10 +714,10 @@ const ceilLights = [[5, 5], [10.2, 9.5]].map(([x, z]) => { const l = new THREE.P
 /* ---------- views ---------- */
 const VIEWS = [
   ['Entry', [4.8, 6.3, 19.8], [7.9, 2.6, 3.0]],
-  ['Fireplace', [21.5, 5.4, 4.6], [0, 3.6, 4.4]],
+  ['Fireplace', [19.5, 5.4, 8.2], [0, 3.6, 4.4]],
   ['Corner', [18.5, 10.5, 18.5], [6.8, 1.8, 5.2]],
   ['From windows', [7.6, 5.0, -1.4], [7.6, 3.3, 15]],
-  ['Toward dining', [-4.5, 5.3, 7.0], [15, 3.0, 7.0]],
+  ['Toward kitchen', [-4.5, 5.3, 7.0], [15, 3.0, 7.0]],
   ['Top', [7.6, 31, 6.75], [7.6, 0, 6.7]],
 ];
 let camAnim = null, curView = 0;
@@ -744,7 +756,7 @@ function positionSelbar(){ const b = document.getElementById('selbar'); const sh
 function addItem(t){ const it = { t, x: 7.6, z: 7.0, r: 0, id: 'i' + (uid++) }; S.items.push(it); makeItem(it); applyLight(); setSelected(it); touch(); toast('Added ' + getCat(t).name + ' — drag it into place'); }
 
 /* ---------- shared store (Vercel Blob via /api/data), with on-device fallback ---------- */
-let store = { versions: [], items: [] }, online = null;
+let store = { versions: [], items: [], renders: [] }, online = null;
 const lsGet = k => { try { return JSON.parse(localStorage.getItem('lr13ab-' + k) || '[]'); } catch { return []; } };
 const lsSet = (k, v) => { try { localStorage.setItem('lr13ab-' + k, JSON.stringify(v)); } catch {} };
 async function api(body){
@@ -767,10 +779,65 @@ async function saveVersion(name){
   if (ok) { loadedLabel = name; dirty = false; history.replaceState(null, '', '#v-' + v.id); renderPanel(); toast(online ? 'Saved. Everyone with the link can see it.' : 'Saved on this device'); }
 }
 async function deleteVersion(v){ await mutate({ op: 'delVersion', id: v.id }, st => st.versions = st.versions.filter(x => x.id !== v.id)); }
+
+/* ---------- photoreal render (Replicate via /api/render; token stays server-side) ---------- */
+const nm = (list, k) => { const f = list.find(x => x[0] === k); return f ? f[1] : k; };
+const colName = c => { const f = WALL_COLORS.find(x => x[1].toLowerCase() === String(c).toLowerCase()) || DRAPE_COLORS.find(x => x[1].toLowerCase() === String(c).toLowerCase()); return f ? f[0].toLowerCase() : 'color ' + c; };
+function describeScene(){
+  const wallTxt = WALL_GROUPS.map(([g, n]) => { const w = S.walls[g]; const f = nm(FINISHES, w.f).toLowerCase(); return n + ': ' + (w.f === 'oak' || w.f === 'walnut' ? f : f + ' in ' + colName(w.c)); }).join('; ');
+  const floorTone = (FLOOR_TONES.find(x => x[1].toLowerCase() === String(S.floorT).toLowerCase()) || ['stained oak'])[0].toLowerCase();
+  const fire = S.mantel === 'flush' ? 'firebox set flush in the plain wall with a slim marble hearth, no surround or shelf'
+    : nm(MARBLES, S.marble) + ' marble fireplace surround' + (S.mantel === 'none' ? ' with no shelf' : ' with a ' + (S.mantel === 'walnut' ? 'walnut' : 'matching marble') + ' mantel shelf');
+  const above = String(S.above || '').startsWith('c:') ? 'the owner’s artwork' : nm(ABOVE, S.above).replace('Art · ', '').toLowerCase();
+  const furn = [...new Set(S.items.map(i => { const c = getCat(i.t); return c && c.name; }).filter(Boolean))].join(', ');
+  return [
+    'Walls — ' + wallTxt + (S.crown ? '; classical crown molding' : '') + '.',
+    'Floor — ' + floorTone + ' wood in ' + (S.floorP === 'herringbone' ? 'herringbone' : 'straight planks') + '.',
+    'Fireplace (west wall) — ' + fire + (S.fire ? ', a gentle fire burning' : ', unlit') + '. Above it: ' + above + '.' + (S.sconces ? ' A pair of wall sconces flank it.' : ''),
+    'Upholstery — sofa in ' + nm(FABRICS, S.sofaF).toLowerCase() + ', chairs in ' + nm(FABRICS, S.chairF).toLowerCase() + '; tables in ' + nm(TABLES, S.table).toLowerCase() + '; rug ' + nm(RUGS, S.rug).toLowerCase() + '.',
+    'Windows — ' + (S.drapes === 'none' ? 'bare' : (S.drapes === 'roman' ? 'roman shades' : 'full-height drapery panels') + ' in ' + colName(S.drapeColor)) + '; Park Avenue view outside.',
+    furn ? 'Furniture shown in the model: ' + furn + '.' : 'No furniture.',
+    'Light — ' + (S.time === 'evening' ? 'evening: dusk outside, lamps and sconces glowing warm' : 'soft natural daylight from the windows') + '.'
+  ].join('\n');
+}
+function captureView(){
+  const oo = selOutline && selOutline.visible; if (selOutline) selOutline.visible = false;
+  renderer.render(scene, camera);
+  const src = renderer.domElement, sc = Math.min(1, 1600 / Math.max(src.width, src.height));
+  const c = document.createElement('canvas'); c.width = Math.round(src.width * sc); c.height = Math.round(src.height * sc);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  if (selOutline) selOutline.visible = oo;
+  return { image: c.toDataURL('image/jpeg', .9), w: c.width, h: c.height };
+}
+function nearestAR(w, h){ const r = w / h; return [['16:9', 16/9], ['3:2', 1.5], ['4:3', 4/3], ['1:1', 1], ['3:4', .75], ['2:3', 2/3], ['9:16', 9/16]].reduce((a, b) => Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a)[0]; }
+let rendering = null, renderExtra = '';
+async function photoreal(){
+  if (rendering) return; const cap = captureView();
+  rendering = { t0: Date.now(), preview: cap.image, status: 'starting' }; renderPanel();
+  try {
+    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    const meta = encodeURIComponent(JSON.stringify({ view: VIEWS[curView] ? VIEWS[curView][0] : '', label: loadedLabel + (dirty ? ' (edited)' : ''), by: who }));
+    for (;;) {
+      await new Promise(res => setTimeout(res, 4000));
+      if (Date.now() - rendering.t0 > 240000) throw new Error('Render is taking too long. It may still appear in the gallery later.');
+      const q = await fetch('/api/render?id=' + j.id + '&meta=' + meta, { cache: 'no-store' }); const k = await q.json().catch(() => ({}));
+      if (!q.ok) throw new Error(k.error || ('HTTP ' + q.status));
+      if (k.status === 'succeeded') { store.renders = k.renders; rendering = null; renderPanel(); showRender(k.render); return; }
+      if (k.status === 'failed' || k.status === 'canceled') throw new Error(k.error || 'Render failed');
+      rendering.status = k.status; renderPanel();
+    }
+  } catch (e) { toast(e.message); rendering = null; renderPanel(); }
+}
+function showRender(r){ dlgbox.innerHTML = '';
+  dlgbox.append(h('img', { src: fileUrl(r.path), alt: 'Photoreal render', style: 'width:100%;border-radius:10px;display:block' }),
+    h('p', { style: 'margin:8px 0 0' }, [r.label, r.view, r.by, new Date(r.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })].filter(Boolean).join(' · ')),
+    h('div', { class: 'bts', style: 'margin-top:10px' }, h('a', { class: 'btn sec', href: fileUrl(r.path), target: '_blank', rel: 'noopener', style: 'text-align:center;text-decoration:none' }, 'Open full size'), h('button', { class: 'btn', on: closeDlg }, 'Close')));
+  dlg.classList.add('show'); }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncStore(); });
 
 /* ---------- UI ---------- */
-const TABS = [['schemes','Schemes'],['walls','Walls'],['floor','Floor'],['fire','Fireplace'],['furn','Furniture'],['fab','Fabrics'],['win','Windows'],['light','Light']];
+const TABS = [['schemes','Schemes'],['walls','Walls'],['floor','Floor'],['fire','Fireplace'],['furn','Furniture'],['fab','Fabrics'],['win','Windows'],['light','Light'],['render','✨ Photoreal']];
 let tab = 'schemes', wallTarget = 'all';
 const tabsEl = document.getElementById('tabs'), panel = document.getElementById('panel'), sheet = document.getElementById('sheet');
 TABS.forEach(([k, n]) => { const b = document.createElement('button'); b.className = 'tab'; b.textContent = n; b.dataset.k = k; b.onclick = () => { tab = k; sheet.classList.remove('min'); renderPanel(); }; tabsEl.appendChild(b); });
@@ -808,7 +875,21 @@ function renderPanel(){
       P_(h('div', { class: 'card' + (loadedLabel === v.name ? ' on' : ''), on: () => { loadState(v.state, v.name); history.replaceState(null, '', '#v-' + v.id); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, v.name), h('div', { class: 'd' }, (v.by ? v.by + ' · ' : '') + new Date(v.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))), del)); });
     P_(h('button', { class: 'btn', on: () => nameDlg() }, 'Save current as a version'));
     P_(h('div', { class: 'note' }, online === null ? 'Connecting…' : online ? 'Saved versions and items are shared, so anyone with this link sees the same list.' : 'Can’t reach the shared store right now, so saves stay on this device.'));
-    P_(h('div', { class: 'note' }, 'Room geometry is from the plan: 15′-3″ wide with the window bay, fireplace on the left wall, 4′-5″ and 5′-0″ arched openings, and the 11′-6″ opening to dining. Ceiling height (8′-6″) and furniture sizes are typical assumptions.'));
+    P_(h('div', { class: 'note' }, 'Room geometry is from the plan, with the owner’s Nov 2026 changes: 15′-3″ wide with the window bay, fireplace set flush in the west wall, square-headed openings (4′-5″ to dining, 5′-0″ to the entry, ~9′-4″ to the kitchen after the extra 2′ of wall by the corner window). Ceiling 8′-6″ and opening heights 7′-0″ are assumptions.'));
+  }
+  if (tab === 'render') {
+    P_(h('div', { class: 'note', style: 'margin-top:0' }, 'Sends exactly what you see in the 3D view (camera, furniture, finishes) to an image model and turns it into a photo-style render. Geometry is locked to the model; set up the view first. Takes about 30–60 seconds; renders are shared with everyone who has the link.'));
+    const ex = h('input', { placeholder: 'Optional extra direction, e.g. “late afternoon sun, books on the coffee table”', maxlength: '300' }); ex.value = renderExtra; ex.oninput = () => renderExtra = ex.value;
+    ex.style.cssText = 'width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;margin:8px 0';
+    P_(ex);
+    if (rendering) P_(h('div', { class: 'card' }, h('img', { src: rendering.preview, alt: '', style: 'width:84px;border-radius:6px;opacity:.6' }), h('div', { class: 'grow' }, h('div', { class: 't' }, 'Rendering…'), h('div', { class: 'd' }, rendering.status + ' · ' + Math.round((Date.now() - rendering.t0)/1000) + 's'))));
+    else P_(h('button', { class: 'btn', on: photoreal }, '✨ Render this view'));
+    const rs = (store.renders || []).slice().reverse();
+    P_(lbl('Renders' + (rs.length ? ' (' + rs.length + ')' : '')));
+    if (!rs.length) P_(h('div', { class: 'note', style: 'margin:0' }, 'None yet.'));
+    else P_(h('div', { style: 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px' }, rs.map(r => { const del = h('button', { class: 'x', title: 'Delete', style: 'position:absolute;top:4px;right:4px;background:rgba(255,255,255,.85);border-radius:50%' }, '×');
+      del.onclick = ev => { ev.stopPropagation(); confirmDlg('Delete this render?', () => mutate({ op: 'delRender', id: r.id }, st => st.renders = (st.renders || []).filter(x => x.id !== r.id))); };
+      return h('div', { style: 'position:relative;cursor:pointer', on: () => showRender(r) }, h('img', { src: fileUrl(r.path), alt: '', loading: 'lazy', style: 'width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;display:block' }), h('div', { class: 'd', style: 'font-size:11.5px;color:var(--muted);margin-top:3px' }, (r.view || '') + (r.label ? ' · ' + r.label : '')), del); })));
   }
   if (tab === 'walls') {
     P_(lbl('Apply to'));
@@ -827,7 +908,7 @@ function renderPanel(){
   }
   if (tab === 'fire') {
     P_(lbl('Surround marble'), h('div', { class: 'row' }, MARBLES.map(([k, n, c]) => sw(c, n, S.marble === k, () => set('marble', k, buildFireplace)))));
-    P_(lbl('Mantel shelf'), h('div', { class: 'row' }, [['marble','Marble'],['walnut','Walnut'],['none','None']].map(([k, n]) => chip(n, S.mantel === k, () => set('mantel', k, buildFireplace)))));
+    P_(lbl('Mantel shelf'), h('div', { class: 'row' }, [['marble','Marble'],['walnut','Walnut'],['none','None'],['flush','Flush, no surround']].map(([k, n]) => chip(n, S.mantel === k, () => set('mantel', k, buildFireplace)))));
     const arts = (store.items || []).filter(i => i.kind === 'art').map(i => ['c:' + i.id, i.name.length > 22 ? i.name.slice(0, 21) + '…' : i.name]);
     P_(lbl('Above the mantel'), h('div', { class: 'row' }, [...ABOVE, ...arts].map(([k, n]) => chip(n, S.above === k, () => set('above', k, buildFireplace)))));
     P_(h('div', { class: 'note' }, 'To try a specific piece of art or a mirror, add it under Furniture → Your items as “Art or mirror”. It will appear here.'));

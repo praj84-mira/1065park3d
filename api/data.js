@@ -1,22 +1,4 @@
-import { put, get } from '@vercel/blob';
-
-const PATH = 'lr13ab/data.json';
-const empty = () => ({ versions: [], items: [] });
-
-async function read() {
-  const r = await get(PATH, { access: 'private', useCache: false });
-  if (!r || r.statusCode !== 200 || !r.stream) return empty();
-  const txt = await new Response(r.stream).text();
-  try { const d = JSON.parse(txt); return { versions: Array.isArray(d.versions) ? d.versions : [], items: Array.isArray(d.items) ? d.items : [] }; }
-  catch { return empty(); }
-}
-
-async function write(d) {
-  const body = JSON.stringify(d);
-  await put(PATH, body, { access: 'private', allowOverwrite: true, addRandomSuffix: false, contentType: 'application/json' });
-  // keep a rolling backup trail in case something gets deleted by mistake
-  await put(`lr13ab/backups/${Date.now()}.json`, body, { access: 'private', contentType: 'application/json' }).catch(() => {});
-}
+import { read, write } from './_store.js';
 
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
@@ -37,6 +19,7 @@ export default async function handler(req, res) {
         if (i >= 0) d.items[i] = b.item; else d.items.push(b.item); break;
       }
       case 'delItem': d.items = d.items.filter(x => x.id !== b.id); break;
+      case 'delRender': d.renders = d.renders.filter(x => x.id !== b.id); break;
       default: return res.status(400).json({ error: 'Unknown op' });
     }
     await write(d);

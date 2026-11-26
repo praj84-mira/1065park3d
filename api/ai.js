@@ -9,7 +9,7 @@ const TABLES = ['walnut','oak','travertine','lacquer'];
 const RUGS = ['ivory','vintage','blue','jute','charcoal'];
 const ABOVE = ['abstract','landscape','mirror','tv','none'];
 
-const ROOM = 'Living room in a 1950s Upper East Side co-op: ~15x15 ft plus a window bay with a wide steel-framed window, ceiling ~8.5 ft, a fireplace with marble surround and mantel on the left wall, arched openings, herringbone wood floor planned, crown molding.';
+const ROOM = 'Living room in a 1950s Upper East Side co-op: ~15x15 ft plus a window bay with a wide steel-framed window, ceiling ~8.5 ft, a fireplace set flush in the left (west) wall, square-headed openings (dining to the west, kitchen to the east, entry hall to the south), herringbone wood floor planned, crown molding.';
 
 const SYS = {
   item: `You help a couple visualise furniture in their ${ROOM}
@@ -21,8 +21,8 @@ Apply the user's request (text and/or reference photo) by calling the apply_chan
 
 Coordinates are in feet, seen from above: x runs 0 (fireplace wall, west) to 15.25 (wide opening to the dining room, east). z runs 0 (window wall, north) to 15.3 (entry wall, south).
 - Window bay: a recess between x 2.6 and 12.6, from z 0 back to z -2.2; the big window is at its back. A small second window is on the east wall near z 0.2-2.3.
-- Fireplace: centred on the west wall at z 4.1 (surround spans z 1.6-6.6, hearth projects to x 1.5). An arched opening to a hallway is on the west wall at z 10.4-14.9.
-- Entry: arched opening on the south wall at x 2.4-7.5. The east wall is mostly an 11.5 ft wide opening (z 3.7-15.2).
+- Fireplace: centred on the west wall at z 4.1 (surround spans z 1.6-6.6, hearth projects to x 1.5). A square-headed 4.4 ft opening to the dining area is on the west wall at z 10.6-15.0.
+- Entry: square-headed opening on the south wall at x 2.45-7.5. East wall: solid from z 0 to 5.9 (corner window at z 0.25-2.25), then a ~9.3 ft square-headed opening to the kitchen (z 5.9-15.2) - nothing can sit in that opening.
 - Corners by the windows: north-west near (1.6, 1.4) (beside the fireplace) and north-east near (13.8, 1.4).
 Each piece has a position (x, z) at the centre of its footprint and a rotation r in degrees. At r=0 the front (seat or keyboard side) faces +z (south, toward the entry); r=180 faces the windows; r=-90 faces the fireplace; r=90 faces the dining room. Use the given footprints (w along local x, d along local z) to keep pieces inside the room, off each other, and at least 2.5 ft clear of walkways through the openings.
 To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall. Colours are #rrggbb. Keep wall colours realistic paint colours.`
