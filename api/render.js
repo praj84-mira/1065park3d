@@ -49,9 +49,9 @@ export default async function handler(req, res) {
       }
       const extra = String(b.extra || '').slice(0, 600);
       await bumpCount();
-      const prompt = `${LOCK}\nDesign (materials and finishes from the 3D model): ${desc}${brief ? `\nDesign brief from the owner (takes precedence over the 3D model's furniture shapes, fabrics and finishes wherever they differ): ${brief}` : ''}${!twoPass && refs.length ? `\nImages 2-${refs.length + 1} are the owner's reference images (reference 1 = image 2, and so on). Reproduce the items, materials and patterns they show as faithfully as possible, placed where the brief says, in this room. Do not copy their room architecture or camera.` : ''}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
       const edit = String(b.edit || '').slice(0, 1200);
       const twoPass = refs.length > 0;
+      const prompt = `${LOCK}\nDesign (materials and finishes from the 3D model): ${desc}${brief ? `\nDesign brief from the owner (takes precedence over the 3D model's furniture shapes, fabrics and finishes wherever they differ): ${brief}` : ''}${!twoPass && refs.length ? `\nImages 2-${refs.length + 1} are the owner's reference images (reference 1 = image 2, and so on). Reproduce the items, materials and patterns they show as faithfully as possible, placed where the brief says, in this room. Do not copy their room architecture or camera.` : ''}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
       const ar = ['4:3', '3:4', '16:9', '9:16', '1:1', '3:2', '2:3'].includes(b.ar) ? b.ar : 'match_input_image';
       const p = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: twoPass ? [img] : [img, ...refs], resolution: '2K', output_format: 'jpg', aspect_ratio: ar } }) });
       if (twoPass) await put(`lr13ab/jobs/${p.id}.json`, JSON.stringify({ refPaths: (b.refs || []).slice(0, 6), edit, brief }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
