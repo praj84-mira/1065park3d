@@ -728,6 +728,7 @@ function goView(i, instant){ curView = i; const [nm, p, t] = VIEWS[i]; const to 
   document.querySelectorAll('.vbtn').forEach((b, j) => b.classList.toggle('on', j === i)); }
 const vb = document.getElementById('views');
 VIEWS.forEach((v, i) => { const b = document.createElement('button'); b.className = 'vbtn'; b.textContent = v[0]; b.onclick = () => goView(i); vb.appendChild(b); });
+{ const b = document.createElement('button'); b.className = 'vbtn'; b.style.cssText = 'background:#8A5A2E;color:#fff;border-color:#8A5A2E'; b.textContent = '✨ Photoreal'; b.onclick = () => { tab = 'render'; document.getElementById('sheet').classList.remove('min'); renderPanel(); photoreal(); }; vb.appendChild(b); }
 
 /* ---------- interaction: pick, drag, rotate ---------- */
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -860,7 +861,9 @@ function renderPanel(){
       const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference: ' + lookFile.name : '');
       fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference: ' + lookFile.name : ''; };
       const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Make the changes');
-      go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; } go.disabled = true; go.textContent = 'Designing…';
+      go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; }
+        if (!lookFile && /photo-?real|realistic|\brender\b|real photo/i.test(lookText)) { tab = 'render'; lookText = ''; renderPanel(); photoreal(); return; }
+        go.disabled = true; go.textContent = 'Designing…';
         try { let files; if (lookFile) { const isPdf = lookFile.type === 'application/pdf'; const blob = isPdf ? lookFile : await shrinkImage(lookFile); const up = await uploadFile(blob, lookFile.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); files = [{ path: up.path }]; }
           const o = await askAI('scheme', lookText.trim(), null, files); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
         catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
