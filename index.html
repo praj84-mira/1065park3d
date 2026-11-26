@@ -838,17 +838,17 @@ async function photoreal(){
   if (rendering) return; const cap = captureView();
   rendering = { t0: Date.now(), preview: cap.image, status: 'starting' }; renderPanel();
   try {
-    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), brief: S.renderBrief || '', refs: S.renderRefs || [], extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
+    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), brief: S.renderBrief || '', edit: S.renderEdit || '', refs: S.renderRefs || [], extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
     const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
     const meta = encodeURIComponent(JSON.stringify({ view: VIEWS[curView] ? VIEWS[curView][0] : '', label: loadedLabel + (dirty ? ' (edited)' : ''), by: who }));
     for (;;) {
       await new Promise(res => setTimeout(res, 4000));
-      if (Date.now() - rendering.t0 > 240000) throw new Error('Render is taking too long. It may still appear in the gallery later.');
+      if (Date.now() - rendering.t0 > 420000) throw new Error('Render is taking too long. It may still appear in the gallery later.');
       const q = await fetch('/api/render?id=' + j.id + '&meta=' + meta, { cache: 'no-store' }); const k = await q.json().catch(() => ({}));
       if (!q.ok) throw new Error(k.error || ('HTTP ' + q.status));
       if (k.status === 'succeeded') { store.renders = k.renders; rendering = null; renderPanel(); showRender(k.render); return; }
       if (k.status === 'failed' || k.status === 'canceled') throw new Error(k.error || 'Render failed');
-      rendering.status = k.status; renderPanel();
+      rendering.status = k.status === 'refining' ? 'placing your reference pieces' : k.status; renderPanel();
     }
   } catch (e) { toast(e.message); rendering = null; renderPanel(); }
 }
@@ -921,7 +921,7 @@ function renderPanel(){
     if (S.renderBrief || (S.renderRefs || []).length) {
       P_(lbl('Design brief carried into the render'), h('div', { class: 'note', style: 'margin:0 0 6px;color:var(--ink)' }, S.renderBrief || ''),
         (S.renderRefs || []).length ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px' }, S.renderRefs.map((p, i) => h('div', { style: 'position:relative' }, h('img', { src: fileUrl(p), alt: '', style: 'width:56px;height:56px;object-fit:cover;border-radius:6px;display:block' }), h('span', { style: 'position:absolute;left:3px;top:2px;font-size:10px;background:rgba(255,255,255,.85);border-radius:4px;padding:0 3px' }, 'ref ' + (i + 1))))) : '',
-        h('button', { class: 'btn sec', style: 'width:auto', on: () => { S.renderBrief = ''; S.renderRefs = []; touch(); renderPanel(); } }, 'Clear brief & references'));
+        h('button', { class: 'btn sec', style: 'width:auto', on: () => { S.renderBrief = ''; S.renderEdit = ''; S.renderRefs = []; touch(); renderPanel(); } }, 'Clear brief & references'));
     }
     if (rendering) P_(h('div', { class: 'card' }, h('img', { src: rendering.preview, alt: '', style: 'width:84px;border-radius:6px;opacity:.6' }), h('div', { class: 'grow' }, h('div', { class: 't' }, 'Rendering…'), h('div', { class: 'd' }, rendering.status + ' · ' + Math.round((Date.now() - rendering.t0)/1000) + 's'))));
     else P_(h('button', { class: 'btn', on: photoreal }, '✨ Render this view'));
@@ -1018,7 +1018,7 @@ function aiContext(){
   const catalog = [...Object.entries(CATALOG).map(([t, c]) => ({ t, name: c.name, w: c.w, d: c.d })),
     ...(store.items || []).filter(ci => ci.kind !== 'art').map(ci => ({ t: 'c:' + ci.id, name: ci.name + ' (their own item)', w: +(ci.w/12).toFixed(1), d: +(ci.d/12).toFixed(1) }))];
   const finishes = { walls: S.walls, floorP: S.floorP, floorT: S.floorT, marble: S.marble, mantel: S.mantel, above: S.above, sofaF: S.sofaF, chairF: S.chairF, table: S.table, rug: S.rug, drapes: S.drapes, crown: S.crown };
-  return { items, catalog, finishes, renderBrief: S.renderBrief || '', refCount: (S.renderRefs || []).length };
+  return { items, catalog, finishes, renderBrief: S.renderBrief || '', renderEdit: S.renderEdit || '', refCount: (S.renderRefs || []).length };
 }
 async function askAI(mode, text, image, files){
   const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, files, context: mode === 'scheme' ? aiContext() : undefined }) });
@@ -1031,6 +1031,7 @@ function applyLook(o){
   if (o.move) for (const m of o.move) { const it = S.items.find(i => i.id === m.id); if (!it) continue; if (m.x != null) it.x = m.x; if (m.z != null) it.z = m.z; if (m.r != null) it.r = m.r; }
   if (o.add) for (const a of o.add) if (getCat(a.t)) S.items.push({ t: a.t, x: a.x, z: a.z, r: a.r || 0, id: 'i' + (uid++) });
   if (o.renderBrief) S.renderBrief = o.renderBrief;
+  if (o.renderEdit !== undefined) S.renderEdit = o.renderEdit;
   applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); setSelected(null); rebuildItems();
   dirty = true; renderPanel();
 }

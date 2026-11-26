@@ -49,17 +49,40 @@ export default async function handler(req, res) {
       }
       const extra = String(b.extra || '').slice(0, 600);
       await bumpCount();
-      const prompt = `${LOCK}\nDesign (materials and finishes from the 3D model): ${desc}${brief ? `\nDesign brief from the owner (takes precedence over the 3D model's furniture shapes, fabrics and finishes wherever they differ): ${brief}` : ''}${refs.length ? `\nImages 2-${refs.length + 1} are the owner's reference images (reference 1 = image 2, and so on). Reproduce the items, materials and patterns they show as faithfully as possible, placed where the brief says, in this room. Do not copy their room architecture or camera.` : ''}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
+      const prompt = `${LOCK}\nDesign (materials and finishes from the 3D model): ${desc}${brief ? `\nDesign brief from the owner (takes precedence over the 3D model's furniture shapes, fabrics and finishes wherever they differ): ${brief}` : ''}${!twoPass && refs.length ? `\nImages 2-${refs.length + 1} are the owner's reference images (reference 1 = image 2, and so on). Reproduce the items, materials and patterns they show as faithfully as possible, placed where the brief says, in this room. Do not copy their room architecture or camera.` : ''}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
+      const edit = String(b.edit || '').slice(0, 1200);
+      const twoPass = refs.length > 0;
       const ar = ['4:3', '3:4', '16:9', '9:16', '1:1', '3:2', '2:3'].includes(b.ar) ? b.ar : 'match_input_image';
-      const p = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: [img, ...refs], resolution: '2K', output_format: 'jpg', aspect_ratio: ar } }) });
+      const p = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: twoPass ? [img] : [img, ...refs], resolution: '2K', output_format: 'jpg', aspect_ratio: ar } }) });
+      if (twoPass) await put(`lr13ab/jobs/${p.id}.json`, JSON.stringify({ refPaths: (b.refs || []).slice(0, 6), edit, brief }), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
       return res.status(200).json({ id: p.id, status: p.status });
     }
     if (req.method === 'GET') {
       const id = String(req.query.id || '');
       if (!/^[a-z0-9]{10,40}$/.test(id)) return res.status(400).json({ error: 'Bad id' });
-      const p = await rep('predictions/' + id);
+      let p = await rep('predictions/' + id);
       if (p.status === 'failed' || p.status === 'canceled') return res.status(200).json({ status: p.status, error: p.error || 'Render failed' });
       if (p.status !== 'succeeded') return res.status(200).json({ status: p.status });
+      // second pass: place the owner's reference pieces into the finished photo with a targeted edit
+      const jr = await get(`lr13ab/jobs/${id}.json`, { access: 'private', useCache: false }).catch(() => null);
+      if (jr && jr.statusCode === 200 && jr.stream) {
+        const job = JSON.parse(await new Response(jr.stream).text());
+        if (!job.stage2) {
+          const refs = [];
+          for (const rp of job.refPaths || []) { if (!/^lr13ab\/files\/[a-z0-9]+\.(jpg|png|webp)$/.test(String(rp))) continue; const r = await get(String(rp), { access: 'private' }).catch(() => null);
+            if (r && r.statusCode === 200 && r.stream) refs.push(`data:${r.blob.contentType || 'image/jpeg'};base64,` + Buffer.from(await new Response(r.stream).arrayBuffer()).toString('base64')); }
+          const first = Array.isArray(p.output) ? p.output[0] : p.output;
+          const instr = job.edit || `Make image 1 match this brief, using images 2-${refs.length + 1} as exact references for the pieces they show: ${job.brief}`;
+          const prompt = `Edit image 1, a photograph of a living room. Images 2-${refs.length + 1} are the owner's reference images (reference N = image N+1); use them only for the look of the pieces they show, never their room, walls or camera.\n${instr}\nKeep image 1's camera, framing, walls, windows, openings, fireplace, floor, lighting and every object not mentioned exactly as they are. Photorealistic, seamless, correct scale and shadows. Change nothing else.`;
+          const p2 = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: [first, ...refs], resolution: '2K', output_format: 'jpg', aspect_ratio: 'match_input_image' } }) });
+          job.stage2 = p2.id; await put(`lr13ab/jobs/${id}.json`, JSON.stringify(job), { access: 'private', contentType: 'application/json', addRandomSuffix: false, allowOverwrite: true });
+          return res.status(200).json({ status: 'refining' });
+        }
+        const p2 = await rep('predictions/' + job.stage2);
+        if (p2.status === 'failed' || p2.status === 'canceled') { /* fall back to the first-pass image */ }
+        else if (p2.status !== 'succeeded') return res.status(200).json({ status: 'refining' });
+        else p = p2;
+      }
       const path = `lr13ab/files/r${id}.jpg`;
       const d = await read();
       let r = d.renders.find(x => x.id === id);

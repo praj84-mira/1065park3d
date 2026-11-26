@@ -50,6 +50,7 @@ const SCHEME_TOOL = {
   description: 'Apply changes to the living-room mock-up. Include only the fields that should change.',
   input_schema: { type: 'object', properties: {
     summary: { type: 'string', description: 'One short sentence describing what changed' },
+    render_edit: { type: 'string', description: 'Edit instructions for a second, targeted pass by an image editor. It receives the finished room photo as image 1 and the reference images as images 2, 3, ... (reference N = image N+1). One imperative sentence per specific item that must look a particular way (a named product, a reference-image piece, a pattern, a material), e.g. "Replace the long sofa facing the fireplace with the exact sofa in image 2 (Pierre Paulin Pumpkin, pale grey), same position and orientation, scaled to the room." End with "Change nothing else." Cumulative: carry over still-wanted items from the current edit list. Empty string if nothing needs a targeted edit.' },
     render_brief: { type: 'string', description: 'The full design brief for the photoreal render, rewritten to include the current brief plus this request. Describe every item the user has asked for in concrete, photographic terms (designer/model if known, shape, material, colour, pattern, scale) - especially anything the 3D options cannot show exactly. Mention which reference image (by number) shows each item. Max ~120 words.' },
     walls: { type: 'object', description: 'Only the walls to change', properties: Object.fromEntries(['fire','window','entry','opening'].map(g => [g, { type: 'object', properties: { f: { type: 'string', enum: FINISHES }, c: { type: 'string' } }, required: ['f', 'c'] }])) },
     floorP: { type: 'string', enum: ['herringbone', 'plank', 'versailles'], description: 'versailles = square parquet panels with a framed diagonal lattice (Versailles / Chantilly panels); plank = straight boards' }, floorT: { type: 'string', description: 'wood tone #rrggbb; darker is lower lightness' },
@@ -82,6 +83,7 @@ function cleanItem(o) {
 function cleanScheme(o, ctx) {
   const out = { summary: String(o.summary || '').slice(0, 300) };
   if (typeof o.render_brief === 'string' && o.render_brief.trim()) out.renderBrief = o.render_brief.trim().slice(0, 1500);
+  if (typeof o.render_edit === 'string') out.renderEdit = o.render_edit.trim().slice(0, 1200);
   const ids = new Set((ctx.items || []).map(i => String(i.id)));
   const types = new Set((ctx.catalog || []).map(c => String(c.t)));
   const num = (v, lo, hi, dflt) => { const n = parseFloat(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
@@ -160,7 +162,7 @@ export default async function handler(req, res) {
   const mode = b.mode === 'scheme' ? 'scheme' : 'item';
   let text = String(b.text || '').slice(0, 2000);
   const ctx = b.context && typeof b.context === 'object' ? b.context : {};
-  if (mode === 'scheme') text = 'Request: ' + (text || '(see the attached references)') + (Array.isArray(b.files) && b.files.length ? `\n(${b.files.length} reference file(s) attached; in the render they will be numbered after the existing references: ${(ctx.refCount || 0) + 1}..${(ctx.refCount || 0) + b.files.length})` : '') + '\n\nCurrent render brief: ' + String(ctx.renderBrief || '(none yet)').slice(0, 1500) + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
+  if (mode === 'scheme') text = 'Request: ' + (text || '(see the attached references)') + (Array.isArray(b.files) && b.files.length ? `\n(${b.files.length} reference file(s) attached; in the render they will be numbered after the existing references: ${(ctx.refCount || 0) + 1}..${(ctx.refCount || 0) + b.files.length})` : '') + '\n\nCurrent render brief: ' + String(ctx.renderBrief || '(none yet)').slice(0, 1500) + '\n\nCurrent edit list: ' + String(ctx.renderEdit || '(none)').slice(0, 1200) + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
   const image = typeof b.image === 'string' && b.image.length < 3_500_000 && b.image.startsWith('data:image/') ? b.image : null;
   const hasFiles = Array.isArray(b.files) && b.files.length > 0;
   if (!text && !image && !hasFiles) return res.status(400).json({ error: 'Describe it, or add a photo or PDF first' });
