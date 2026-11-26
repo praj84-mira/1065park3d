@@ -219,13 +219,28 @@ function floorTex(pattern, tone){
         const hx = k*w + sx, hy = k*w + sy; if (hx < S + 10 && hx + L > -10 && hy < S + 10 && hy + w > -10) drawPlank(x, hx, hy, L, w, cls + 1, true);
         const vx = k*w + sx, vy = k*w + w + sy; if (vx < S + 10 && vx + w > -10 && vy < S + 10 && vy + L > -10) drawPlank(x, vx, vy, w, L, cls + 101, false);
       }
+    } else if (pattern === 'versailles') {
+      // Versailles parquet: 2 ft panels, oak frame border with a diagonal basket-weave lattice inside
+      const P = ppf*2, b = P*0.11, inner = P - 2*b, q = inner/(2*Math.SQRT2), sw = q*0.32; let seed = 500;
+      for (let py = 0; py < S; py += P) for (let px = 0; px < S; px += P) {
+        drawPlank(x, px, py, P, b, seed++, true); drawPlank(x, px, py + P - b, P, b, seed++, true);
+        drawPlank(x, px, py + b, b, inner, seed++, false); drawPlank(x, px + P - b, py + b, b, inner, seed++, false);
+        x.save(); x.beginPath(); x.rect(px + b, py + b, inner, inner); x.clip();
+        x.translate(px + P/2, py + P/2); x.rotate(Math.PI/4);
+        for (let i = -3; i <= 2; i++) for (let j = -3; j <= 2; j++) {
+          const cx = i*q, cy = j*q;
+          drawPlank(x, cx + sw, cy + sw, q - sw, q - sw, seed++, (i + j) % 2 === 0);
+          drawPlank(x, cx, cy, sw, q, seed++, false); drawPlank(x, cx + sw, cy, q - sw, sw, seed++, true);
+        }
+        x.restore(); x.strokeStyle = 'rgba(15,10,6,.45)'; x.lineWidth = 2; x.strokeRect(px + b, py + b, inner, inner);
+      }
     } else {
       const rowH = ppf*8/12; const sets = [[3,5],[2.5,2.5,3],[4,4],[2,3,3],[3.5,4.5],[5,3]];
       for (let row = 0; row < 12; row++) { const r = rng(row + 41); let xx = r()*S; const set = sets[Math.floor(r()*sets.length)];
         set.forEach((len, i) => { const pw = len*ppf; drawPlank(x, xx, row*rowH, pw, rowH, row*10 + i + 3, true); drawPlank(x, xx - S, row*rowH, pw, rowH, row*10 + i + 3, true); xx += pw; }); }
     }
   });
-  t.center.set(.5, .5); t.rotation = pattern === 'herringbone' ? Math.PI/4 : Math.PI/2; t.repeat.set(6, 6);
+  t.center.set(.5, .5); t.rotation = pattern === 'herringbone' ? Math.PI/4 : pattern === 'versailles' ? 0 : Math.PI/2; t.repeat.set(6, 6);
   return t;
 }
 
@@ -786,14 +801,14 @@ const nm = (list, k) => { const f = list.find(x => x[0] === k); return f ? f[1] 
 const colName = c => { const f = WALL_COLORS.find(x => x[1].toLowerCase() === String(c).toLowerCase()) || DRAPE_COLORS.find(x => x[1].toLowerCase() === String(c).toLowerCase()); return f ? f[0].toLowerCase() : 'color ' + c; };
 function describeScene(){
   const wallTxt = WALL_GROUPS.map(([g, n]) => { const w = S.walls[g]; const f = nm(FINISHES, w.f).toLowerCase(); return n + ': ' + (w.f === 'oak' || w.f === 'walnut' ? f : f + ' in ' + colName(w.c)); }).join('; ');
-  const floorTone = (FLOOR_TONES.find(x => x[1].toLowerCase() === String(S.floorT).toLowerCase()) || ['stained oak'])[0].toLowerCase();
+  const floorTone = (FLOOR_TONES.find(x => x[1].toLowerCase() === String(S.floorT).toLowerCase()) || [(() => { const c = parseInt(String(S.floorT).slice(1), 16), l = ((c >> 16) + (c >> 8 & 255) + (c & 255))/765; return l > .6 ? 'pale natural oak' : l > .42 ? 'natural mid-tone oak' : l > .28 ? 'medium-brown stained oak' : 'dark stained oak'; })()])[0].toLowerCase();
   const fire = S.mantel === 'flush' ? 'firebox set flush in the plain wall with a slim marble hearth, no surround or shelf'
     : nm(MARBLES, S.marble) + ' marble fireplace surround' + (S.mantel === 'none' ? ' with no shelf' : ' with a ' + (S.mantel === 'walnut' ? 'walnut' : 'matching marble') + ' mantel shelf');
   const above = String(S.above || '').startsWith('c:') ? 'the owner’s artwork' : nm(ABOVE, S.above).replace('Art · ', '').toLowerCase();
   const furn = [...new Set(S.items.map(i => { const c = getCat(i.t); return c && c.name; }).filter(Boolean))].join(', ');
   return [
     'Walls — ' + wallTxt + (S.crown ? '; classical crown molding' : '') + '.',
-    'Floor — ' + floorTone + ' wood in ' + (S.floorP === 'herringbone' ? 'herringbone' : 'straight planks') + '.',
+    'Floor — ' + floorTone + ' wood in ' + (S.floorP === 'herringbone' ? 'herringbone' : S.floorP === 'versailles' ? 'Versailles parquet panels (square panels with a framed diagonal lattice)' : 'straight planks') + '.',
     'Fireplace (west wall) — ' + fire + (S.fire ? ', a gentle fire burning' : ', unlit') + '. Above it: ' + above + '.' + (S.sconces ? ' A pair of wall sconces flank it.' : ''),
     'Upholstery — sofa in ' + nm(FABRICS, S.sofaF).toLowerCase() + ', chairs in ' + nm(FABRICS, S.chairF).toLowerCase() + '; tables in ' + nm(TABLES, S.table).toLowerCase() + '; rug ' + nm(RUGS, S.rug).toLowerCase() + '.',
     'Windows — ' + (S.drapes === 'none' ? 'bare' : (S.drapes === 'roman' ? 'roman shades' : 'full-height drapery panels') + ' in ' + colName(S.drapeColor)) + '; Park Avenue view outside.',
@@ -912,7 +927,7 @@ function renderPanel(){
     P_(lbl('Ceiling'), h('div', { class: 'row' }, chip('Crown molding', S.crown, () => set('crown', !S.crown, setCrown))));
   }
   if (tab === 'floor') {
-    P_(lbl('Pattern'), h('div', { class: 'row' }, chip('Herringbone', S.floorP === 'herringbone', () => set('floorP', 'herringbone', applyFloor)), chip('Straight plank', S.floorP === 'plank', () => set('floorP', 'plank', applyFloor))));
+    P_(lbl('Pattern'), h('div', { class: 'row' }, chip('Herringbone', S.floorP === 'herringbone', () => set('floorP', 'herringbone', applyFloor)), chip('Straight plank', S.floorP === 'plank', () => set('floorP', 'plank', applyFloor)), chip('Versailles panels', S.floorP === 'versailles', () => set('floorP', 'versailles', applyFloor))));
     P_(lbl('Tone'), h('div', { class: 'row' }, FLOOR_TONES.map(([n, c]) => sw(c, n, S.floorT === c, () => set('floorT', c, applyFloor)))));
     P_(h('div', { class: 'note' }, 'Herringbone is confirmed for the entertaining rooms. Dark tones are close to the PID Walworth sample.'));
   }

@@ -43,7 +43,7 @@ const SCHEME_TOOL = {
   input_schema: { type: 'object', properties: {
     summary: { type: 'string', description: 'One short sentence describing what changed' },
     walls: { type: 'object', description: 'Only the walls to change', properties: Object.fromEntries(['fire','window','entry','opening'].map(g => [g, { type: 'object', properties: { f: { type: 'string', enum: FINISHES }, c: { type: 'string' } }, required: ['f', 'c'] }])) },
-    floorP: { type: 'string', enum: ['herringbone', 'plank'] }, floorT: { type: 'string', description: 'wood tone #rrggbb; darker is lower lightness' },
+    floorP: { type: 'string', enum: ['herringbone', 'plank', 'versailles'], description: 'versailles = square parquet panels with a framed diagonal lattice (Versailles / Chantilly panels); plank = straight boards' }, floorT: { type: 'string', description: 'wood tone #rrggbb; darker is lower lightness' },
     marble: { type: 'string', enum: MARBLES }, mantel: { type: 'string', enum: ['marble', 'walnut', 'none'] }, above: { type: 'string', enum: ABOVE },
     sofaF: { type: 'string', description: 'fabric id ' + FABRICS.join('/') + ' or #rrggbb' }, chairF: { type: 'string', description: 'same as sofaF' },
     table: { type: 'string', enum: TABLES }, rug: { type: 'string', enum: RUGS, description: 'pattern for rugs in the room' },
@@ -79,7 +79,7 @@ function cleanScheme(o, ctx) {
   if (Array.isArray(o.add)) out.add = o.add.filter(a => a && types.has(String(a.t))).slice(0, 12).map(a => ({ t: String(a.t), x: num(a.x, -0.5, 16, 7.6), z: num(a.z, -2.2, 15.5, 7), r: num(a.r, -360, 360, 0) }));
   if (Array.isArray(o.move)) out.move = o.move.filter(m => m && ids.has(String(m.id))).map(m => ({ id: String(m.id), x: num(m.x, -0.5, 16, null), z: num(m.z, -2.2, 15.5, null), r: m.r == null ? null : num(m.r, -360, 360, 0) }));
   if (o.walls && typeof o.walls === 'object') { out.walls = {}; for (const g of ['fire','window','entry','opening']) { const w = o.walls[g]; if (w && pick(w.f, FINISHES)) out.walls[g] = { f: w.f, c: hex(w.c) || '#EDE8DE' }; } }
-  if (o.floorP === 'herringbone' || o.floorP === 'plank') out.floorP = o.floorP;
+  if (['herringbone', 'plank', 'versailles'].includes(o.floorP)) out.floorP = o.floorP;
   if (hex(o.floorT)) out.floorT = hex(o.floorT);
   if (pick(o.marble, MARBLES)) out.marble = o.marble;
   if (['marble','walnut','none'].includes(o.mantel)) out.mantel = o.mantel;
