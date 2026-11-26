@@ -858,17 +858,24 @@ function renderPanel(){
     { const ta = h('textarea', { placeholder: 'Describe changes, e.g. “darken the floors, remove the rugs, add a baby grand in the corner by the windows”', style: 'width:100%;min-height:62px;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;box-sizing:border-box' });
       ta.value = lookText; ta.oninput = () => lookText = ta.value;
       const fin = h('input', { type: 'file', accept: 'image/*,application/pdf', style: 'display:none' });
-      const st = h('div', { class: 'note', style: 'margin-top:6px' }, lookFile ? 'Reference: ' + lookFile.name : '');
-      fin.onchange = () => { lookFile = fin.files[0] || null; st.textContent = lookFile ? 'Reference: ' + lookFile.name : ''; };
+      fin.multiple = true;
+      const st = h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+      const drawFiles = () => { st.innerHTML = ''; lookFiles.forEach((f, i) => { const x = h('button', { class: 'x', title: 'Remove', style: 'margin-left:4px' }, '×'); x.onclick = () => { lookFiles.splice(i, 1); drawFiles(); };
+        st.append(h('span', { class: 'chip', style: 'display:inline-flex;align-items:center;max-width:100%' }, h('span', { style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px' }, (f.type === 'application/pdf' ? '📄 ' : '🖼 ') + f.name), x)); });
+        if (lookFiles.length) st.append(h('span', { class: 'note', style: 'margin:0;align-self:center' }, lookFiles.length + ' of ' + MAX_LOOK_FILES)); };
+      drawFiles();
+      fin.onchange = () => { const add = [...fin.files]; fin.value = ''; const room = MAX_LOOK_FILES - lookFiles.length; if (add.length > room) toast('Up to ' + MAX_LOOK_FILES + ' files; extra ones were skipped'); lookFiles.push(...add.slice(0, Math.max(0, room))); drawFiles(); };
       const go = h('button', { class: 'btn', style: 'flex:1' }, '✨ Make the changes');
-      go.onclick = async () => { if (!lookText.trim() && !lookFile) { ta.focus(); return; }
-        if (!lookFile && /photo-?real|realistic|\brender\b|real photo/i.test(lookText)) { tab = 'render'; lookText = ''; renderPanel(); photoreal(); return; }
+      go.onclick = async () => { if (!lookText.trim() && !lookFiles.length) { ta.focus(); return; }
+        if (!lookFiles.length && /photo-?real|realistic|\brender\b|real photo/i.test(lookText)) { tab = 'render'; lookText = ''; renderPanel(); photoreal(); return; }
         go.disabled = true; go.textContent = 'Designing…';
-        try { let files; if (lookFile) { const isPdf = lookFile.type === 'application/pdf'; const blob = isPdf ? lookFile : await shrinkImage(lookFile); const up = await uploadFile(blob, lookFile.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); files = [{ path: up.path }]; }
+        try { let files; if (lookFiles.length) { go.textContent = 'Uploading ' + lookFiles.length + '…';
+            files = await Promise.all(lookFiles.map(async f => { const isPdf = f.type === 'application/pdf'; const blob = isPdf ? f : await shrinkImage(f); const up = await uploadFile(blob, f.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); return { path: up.path }; }));
+            go.textContent = 'Designing…'; }
           const o = await askAI('scheme', lookText.trim(), null, files); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
         catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
-      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photo / PDF'), go), fin, st,
-        h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). A magazine photo or a PDF (designer deck, catalog page) works as a reference. Save it as a version if you like it.')); }
+      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photos / PDFs'), go), fin, st,
+        h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). Attach up to 6 photos or PDFs (magazine pages, designer deck, catalog pages) as references. Save it as a version if you like it.')); }
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
     const vs = allVersions();
@@ -995,7 +1002,7 @@ function applyLook(o){
   applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); setSelected(null); rebuildItems();
   dirty = true; renderPanel();
 }
-let lookText = '', lookFile = null;
+let lookText = '', lookFiles = []; const MAX_LOOK_FILES = 6;
 async function shrinkImage(file){
   const u = URL.createObjectURL(file);
   try { const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });

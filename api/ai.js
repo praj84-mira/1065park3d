@@ -96,7 +96,7 @@ function cleanScheme(o, ctx) {
 
 async function loadFiles(list) {
   const blocks = [];
-  for (const f of (Array.isArray(list) ? list : []).slice(0, 4)) {
+  for (const f of (Array.isArray(list) ? list : []).slice(0, 6)) {
     const p = String((f && f.path) || '');
     if (!/^lr13ab\/files\/[a-z0-9]+\.(jpg|png|webp|gif|pdf)$/.test(p)) continue;
     const r = await get(p, { access: 'private' }).catch(() => null);
