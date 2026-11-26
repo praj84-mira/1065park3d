@@ -838,7 +838,7 @@ async function photoreal(){
   if (rendering) return; const cap = captureView();
   rendering = { t0: Date.now(), preview: cap.image, status: 'starting' }; renderPanel();
   try {
-    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
+    const r = await fetch('/api/render', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: cap.image, desc: describeScene(), brief: S.renderBrief || '', refs: S.renderRefs || [], extra: renderExtra.trim(), ar: nearestAR(cap.w, cap.h) }) });
     const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
     const meta = encodeURIComponent(JSON.stringify({ view: VIEWS[curView] ? VIEWS[curView][0] : '', label: loadedLabel + (dirty ? ' (edited)' : ''), by: who }));
     for (;;) {
@@ -894,9 +894,13 @@ function renderPanel(){
         try { let files; if (lookFiles.length) { go.textContent = 'Uploading ' + lookFiles.length + '…';
             files = await Promise.all(lookFiles.map(async f => { const isPdf = f.type === 'application/pdf'; const blob = isPdf ? f : await shrinkImage(f); const up = await uploadFile(blob, f.name, isPdf ? 'application/pdf' : (blob.type || 'image/jpeg')); return { path: up.path }; }));
             go.textContent = 'Designing…'; }
-          const o = await askAI('scheme', lookText.trim(), null, files); applyLook(o); toast(o.summary || 'Look applied. Save it as a version if you like it.'); }
+          const o = await askAI('scheme', lookText.trim(), null, files);
+          if (files) { const imgs = files.filter(f => !/\.pdf$/.test(f.path)).map(f => f.path); S.renderRefs = [...(S.renderRefs || []), ...imgs].slice(-6); }
+          applyLook(o); lookFiles = []; lastSummary = o.summary || 'Look applied.'; renderPanel(); }
         catch (e) { toast(e.message); } finally { go.disabled = false; go.textContent = '✨ Make the changes'; } };
-      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photos / PDFs'), go), fin, st,
+      const sumBox = lastSummary ? h('div', { class: 'card', style: 'margin-top:8px;display:block' }, h('div', { class: 'd', style: 'font-size:13px;color:var(--ink)' }, lastSummary),
+        h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { class: 'btn', style: 'width:auto', on: () => { lastSummary = ''; tab = 'render'; renderPanel(); photoreal(); } }, '✨ See it photoreal'), h('button', { class: 'btn sec', style: 'width:auto', on: () => { lastSummary = ''; renderPanel(); } }, 'Dismiss'))) : '';
+      P_(lbl('Describe changes'), ta, h('div', { class: 'row', style: 'margin-top:7px;flex-wrap:nowrap' }, h('button', { class: 'btn sec', style: 'width:auto;flex:none', on: () => fin.click() }, '+ Photos / PDFs'), go), fin, st, sumBox,
         h('div', { class: 'note', style: 'margin-top:4px' }, 'Ask for anything: finishes, colours or furniture (“remove the rugs”, “add a baby grand by the windows”, “swap the sofa for my bouclé one”). Attach up to 6 photos or PDFs (magazine pages, designer deck, catalog pages) as references. Save it as a version if you like it.')); }
     P_(lbl('Starting schemes'));
     PRESETS.forEach(p => P_(h('div', { class: 'card' + (loadedLabel === p.name ? ' on' : ''), on: () => { loadState(p.s, p.name); history.replaceState(null, '', location.pathname); } }, h('div', { class: 'grow' }, h('div', { class: 't' }, p.name), h('div', { class: 'd' }, p.desc)))));
@@ -914,6 +918,11 @@ function renderPanel(){
     const ex = h('input', { placeholder: 'Optional extra direction, e.g. “late afternoon sun, books on the coffee table”', maxlength: '300' }); ex.value = renderExtra; ex.oninput = () => renderExtra = ex.value;
     ex.style.cssText = 'width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px Inter,sans-serif;margin:8px 0';
     P_(ex);
+    if (S.renderBrief || (S.renderRefs || []).length) {
+      P_(lbl('Design brief carried into the render'), h('div', { class: 'note', style: 'margin:0 0 6px;color:var(--ink)' }, S.renderBrief || ''),
+        (S.renderRefs || []).length ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px' }, S.renderRefs.map((p, i) => h('div', { style: 'position:relative' }, h('img', { src: fileUrl(p), alt: '', style: 'width:56px;height:56px;object-fit:cover;border-radius:6px;display:block' }), h('span', { style: 'position:absolute;left:3px;top:2px;font-size:10px;background:rgba(255,255,255,.85);border-radius:4px;padding:0 3px' }, 'ref ' + (i + 1))))) : '',
+        h('button', { class: 'btn sec', style: 'width:auto', on: () => { S.renderBrief = ''; S.renderRefs = []; touch(); renderPanel(); } }, 'Clear brief & references'));
+    }
     if (rendering) P_(h('div', { class: 'card' }, h('img', { src: rendering.preview, alt: '', style: 'width:84px;border-radius:6px;opacity:.6' }), h('div', { class: 'grow' }, h('div', { class: 't' }, 'Rendering…'), h('div', { class: 'd' }, rendering.status + ' · ' + Math.round((Date.now() - rendering.t0)/1000) + 's'))));
     else P_(h('button', { class: 'btn', on: photoreal }, '✨ Render this view'));
     const rs = (store.renders || []).slice().reverse();
@@ -1009,7 +1018,7 @@ function aiContext(){
   const catalog = [...Object.entries(CATALOG).map(([t, c]) => ({ t, name: c.name, w: c.w, d: c.d })),
     ...(store.items || []).filter(ci => ci.kind !== 'art').map(ci => ({ t: 'c:' + ci.id, name: ci.name + ' (their own item)', w: +(ci.w/12).toFixed(1), d: +(ci.d/12).toFixed(1) }))];
   const finishes = { walls: S.walls, floorP: S.floorP, floorT: S.floorT, marble: S.marble, mantel: S.mantel, above: S.above, sofaF: S.sofaF, chairF: S.chairF, table: S.table, rug: S.rug, drapes: S.drapes, crown: S.crown };
-  return { items, catalog, finishes };
+  return { items, catalog, finishes, renderBrief: S.renderBrief || '', refCount: (S.renderRefs || []).length };
 }
 async function askAI(mode, text, image, files){
   const r = await fetch('/api/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, text, image, files, context: mode === 'scheme' ? aiContext() : undefined }) });
@@ -1021,10 +1030,11 @@ function applyLook(o){
   if (o.remove && o.remove.length) S.items = S.items.filter(i => !o.remove.includes(i.id));
   if (o.move) for (const m of o.move) { const it = S.items.find(i => i.id === m.id); if (!it) continue; if (m.x != null) it.x = m.x; if (m.z != null) it.z = m.z; if (m.r != null) it.r = m.r; }
   if (o.add) for (const a of o.add) if (getCat(a.t)) S.items.push({ t: a.t, x: a.x, z: a.z, r: a.r || 0, id: 'i' + (uid++) });
+  if (o.renderBrief) S.renderBrief = o.renderBrief;
   applyWalls(); applyFloor(); applyFabrics(); buildFireplace(); buildDrapes(); setCrown(); setSelected(null); rebuildItems();
   dirty = true; renderPanel();
 }
-let lookText = '', lookFiles = []; const MAX_LOOK_FILES = 6;
+let lookText = '', lookFiles = [], lastSummary = ''; const MAX_LOOK_FILES = 6;
 async function shrinkImage(file){
   const u = URL.createObjectURL(file);
   try { const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });

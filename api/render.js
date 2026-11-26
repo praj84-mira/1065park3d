@@ -11,7 +11,7 @@ const LOCK = `Turn image 1 into a photorealistic interior photograph of the same
 Image 1 is a 3D massing model and is the SOURCE OF TRUTH for geometry: keep the exact camera position, lens and framing; keep every wall, window, opening, the fireplace and every piece of furniture exactly where and how large they are in image 1. Do not move, add or remove openings, windows, walls or furniture.
 All door openings are square-headed (flat tops), never arched. The fireplace firebox sits where image 1 shows it; there is only one fireplace.
 Beyond the openings: west opening = dining area, east wide opening = kitchen, south opening = entry hall. No windows in the kitchen or dining area.
-Replace flat model colors and textures with real materials matching the description below. Natural, believable light; realistic shadows and reflections; crisp detail. No people, no text, no watermark.
+Replace flat model colors and textures with real materials matching the description below. The architecture (walls, openings, windows, fireplace position, ceiling) is fixed. Furniture keeps its position and rough size from image 1, but where the design brief describes a specific piece, style, fabric or pattern, show that exact piece instead of the simple model shape. Natural, believable light; realistic shadows and reflections; crisp detail. No people, no text, no watermark.
 Room: living room of a pre-war Park Avenue apartment in New York.`;
 
 function token() { const t = process.env.REPLICATE_API_TOKEN; if (!t) throw Object.assign(new Error('Rendering is not set up yet (missing REPLICATE_API_TOKEN).'), { code: 503 }); return t; }
@@ -39,11 +39,19 @@ export default async function handler(req, res) {
       if (!/^data:image\/(jpeg|png);base64,/.test(img)) return res.status(400).json({ error: 'Missing view capture' });
       if (img.length > MAX_IMG) return res.status(413).json({ error: 'Capture too large' });
       const desc = String(b.desc || '').slice(0, 2500);
+      const brief = String(b.brief || '').slice(0, 1600);
+      const refs = [];
+      for (const p of (Array.isArray(b.refs) ? b.refs : []).slice(0, 6)) {
+        if (!/^lr13ab\/files\/[a-z0-9]+\.(jpg|png|webp)$/.test(String(p))) continue;
+        const r = await get(String(p), { access: 'private' }).catch(() => null);
+        if (!r || r.statusCode !== 200 || !r.stream) continue;
+        refs.push(`data:${r.blob.contentType || 'image/jpeg'};base64,` + Buffer.from(await new Response(r.stream).arrayBuffer()).toString('base64'));
+      }
       const extra = String(b.extra || '').slice(0, 600);
       await bumpCount();
-      const prompt = `${LOCK}\nDesign (materials and finishes): ${desc}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
+      const prompt = `${LOCK}\nDesign (materials and finishes from the 3D model): ${desc}${brief ? `\nDesign brief from the owner (takes precedence over the 3D model's furniture shapes, fabrics and finishes wherever they differ): ${brief}` : ''}${refs.length ? `\nImages 2-${refs.length + 1} are the owner's reference images (reference 1 = image 2, and so on). Reproduce the items, materials and patterns they show as faithfully as possible, placed where the brief says, in this room. Do not copy their room architecture or camera.` : ''}${extra ? `\nAdditional direction from the owner: ${extra}` : ''}`;
       const ar = ['4:3', '3:4', '16:9', '9:16', '1:1', '3:2', '2:3'].includes(b.ar) ? b.ar : 'match_input_image';
-      const p = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: [img], resolution: '2K', output_format: 'jpg', aspect_ratio: ar } }) });
+      const p = await rep(`models/${MODEL}/predictions`, { method: 'POST', body: JSON.stringify({ input: { prompt, image_input: [img, ...refs], resolution: '2K', output_format: 'jpg', aspect_ratio: ar } }) });
       return res.status(200).json({ id: p.id, status: p.status });
     }
     if (req.method === 'GET') {

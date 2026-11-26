@@ -28,6 +28,7 @@ Coordinates are in feet, seen from above: x runs 0 (fireplace wall, west) to 15.
 Each piece has a position (x, z) at the centre of its footprint and a rotation r in degrees. At r=0 the front (seat or keyboard side) faces +z (south, toward the entry); r=180 faces the windows; r=-90 faces the fireplace; r=90 faces the dining room. Use the given footprints (w along local x, d along local z) to keep pieces inside the room, off each other, and at least 2.5 ft clear of walkways through the openings.
 To remove pieces, list their ids. To add pieces, use only the listed types. Wall finishes are one of ${JSON.stringify(FINISHES)}; "fire" is the fireplace wall; "molding" = painted picture-frame wall panels (boiserie). Colours are #rrggbb. Keep wall colours realistic paint colours.
 Fabrics: ${FABRIC_NOTES}; any solid #rrggbb also works.
+Two layers: the 3D mock-up (limited options above) and a photoreal render made by an image model from the 3D view, your render_brief and the user's reference images. Always use your design judgement and inference: approximate the request in 3D as well as the options allow (closest fabric/colour, closest piece type, sensible placement), AND write render_brief so the photoreal render shows exactly what was asked for (e.g. "a Pierre Paulin Pumpkin sofa in burnt-orange velvet in place of the sofa"). Never refuse or skip a request because the 3D options are limited; the render carries it.
 Judgement rules:
 - Do every part of the request. If the user criticises something ("the paneling is weird", "too dark"), restyle it; do not just delete it unless they say remove.
 - If something can't be shown exactly with the available options, use the closest option AND say so in the summary (e.g. "Closest available stripe: navy awning stripe").
@@ -49,6 +50,7 @@ const SCHEME_TOOL = {
   description: 'Apply changes to the living-room mock-up. Include only the fields that should change.',
   input_schema: { type: 'object', properties: {
     summary: { type: 'string', description: 'One short sentence describing what changed' },
+    render_brief: { type: 'string', description: 'The full design brief for the photoreal render, rewritten to include the current brief plus this request. Describe every item the user has asked for in concrete, photographic terms (designer/model if known, shape, material, colour, pattern, scale) - especially anything the 3D options cannot show exactly. Mention which reference image (by number) shows each item. Max ~120 words.' },
     walls: { type: 'object', description: 'Only the walls to change', properties: Object.fromEntries(['fire','window','entry','opening'].map(g => [g, { type: 'object', properties: { f: { type: 'string', enum: FINISHES }, c: { type: 'string' } }, required: ['f', 'c'] }])) },
     floorP: { type: 'string', enum: ['herringbone', 'plank', 'versailles'], description: 'versailles = square parquet panels with a framed diagonal lattice (Versailles / Chantilly panels); plank = straight boards' }, floorT: { type: 'string', description: 'wood tone #rrggbb; darker is lower lightness' },
     marble: { type: 'string', enum: MARBLES }, mantel: { type: 'string', enum: ['marble', 'walnut', 'none'] }, above: { type: 'string', enum: ABOVE },
@@ -78,7 +80,8 @@ function cleanItem(o) {
   return { name: String(o.name || 'New item').slice(0, 60), kind, w: clampN(o.w, 2, 240), d: clampN(o.d, 0.5, 200), h: kind === 'rug' ? 0.5 : clampN(o.h, 0.5, 120), color: hex(o.color), notes: String(o.notes || '').slice(0, 300) };
 }
 function cleanScheme(o, ctx) {
-  const out = { summary: String(o.summary || '').slice(0, 200) };
+  const out = { summary: String(o.summary || '').slice(0, 300) };
+  if (typeof o.render_brief === 'string' && o.render_brief.trim()) out.renderBrief = o.render_brief.trim().slice(0, 1500);
   const ids = new Set((ctx.items || []).map(i => String(i.id)));
   const types = new Set((ctx.catalog || []).map(c => String(c.t)));
   const num = (v, lo, hi, dflt) => { const n = parseFloat(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
@@ -157,7 +160,7 @@ export default async function handler(req, res) {
   const mode = b.mode === 'scheme' ? 'scheme' : 'item';
   let text = String(b.text || '').slice(0, 2000);
   const ctx = b.context && typeof b.context === 'object' ? b.context : {};
-  if (mode === 'scheme') text = 'Request: ' + (text || '(see the photo)') + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
+  if (mode === 'scheme') text = 'Request: ' + (text || '(see the attached references)') + (Array.isArray(b.files) && b.files.length ? `\n(${b.files.length} reference file(s) attached; in the render they will be numbered after the existing references: ${(ctx.refCount || 0) + 1}..${(ctx.refCount || 0) + b.files.length})` : '') + '\n\nCurrent render brief: ' + String(ctx.renderBrief || '(none yet)').slice(0, 1500) + '\n\nCurrent state:\n' + JSON.stringify({ finishes: ctx.finishes || {}, pieces: (ctx.items || []).slice(0, 60), availableTypes: (ctx.catalog || []).slice(0, 80) });
   const image = typeof b.image === 'string' && b.image.length < 3_500_000 && b.image.startsWith('data:image/') ? b.image : null;
   const hasFiles = Array.isArray(b.files) && b.files.length > 0;
   if (!text && !image && !hasFiles) return res.status(400).json({ error: 'Describe it, or add a photo or PDF first' });
