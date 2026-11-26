@@ -89,7 +89,9 @@ function cleanItem(o) {
 }
 function cleanScheme(o, ctx) {
   const out = { summary: String(o.summary || '').slice(0, 300) };
-  if (Array.isArray(o.spec)) out.spec = o.spec.filter(x => x && x.what && x.look).slice(0, 16).map(x => ({ what: String(x.what).slice(0, 120), look: String(x.look).slice(0, 400), ref: Number.isInteger(x.ref) && x.ref > 0 ? x.ref : null }));
+  if (typeof o.spec === 'string') { try { o.spec = JSON.parse(o.spec); } catch { o.spec = null; } }
+  if (o.spec && !Array.isArray(o.spec) && Array.isArray(o.spec.items)) o.spec = o.spec.items;
+  if (Array.isArray(o.spec)) out.spec = o.spec.filter(x => x && x.what && x.look).slice(0, 16).map(x => ({ what: String(x.what).slice(0, 120), look: String(x.look).slice(0, 400), ref: parseInt(x.ref) > 0 ? parseInt(x.ref) : null }));
   const ids = new Set((ctx.items || []).map(i => String(i.id)));
   const types = new Set((ctx.catalog || []).map(c => String(c.t)));
   const num = (v, lo, hi, dflt) => { const n = parseFloat(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
